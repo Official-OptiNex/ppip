@@ -1,0 +1,36 @@
+{
+  "name": "ppip",
+  "private": true,
+  "version": "1.0.0",
+  "description": "PPIP - Plant Parts & Inventory Platform (parts, stock alerts, order guides, hot knife & roller PM tracking)",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:web && wrangler dev",
+    "dev:web": "vite",
+    "build": "npm run build:web && npm run build:usb",
+    "build:web": "vite build",
+    "build:usb": "node scripts/build-usb.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json --noEmit",
+    "deploy": "npm run build:web && wrangler deploy",
+    "hash-password": "node scripts/hash-password.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.544.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "read-excel-file": "^5.8.0",
+    "write-excel-file": "^2.3.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260930.2",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.0",
+    "vite-plugin-singlefile": "^2.3.0",
+    "wrangler": "^4.40.0"
+  }
+}

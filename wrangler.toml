@@ -1,0 +1,28 @@
+# Cloudflare Workers config — everything here runs on the FREE plan.
+name = "ppip"
+main = "worker/index.ts"
+compatibility_date = "2025-09-01"
+
+# The built web app (npm run build:web) is served as static assets (free, unlimited).
+[assets]
+directory = "./dist/web"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# One Durable Object holds the whole database (SQLite, persistent, never expires)
+# and pushes live updates to every open screen over WebSockets.
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Store"]
+
+# Daily housekeeping: automatic backup snapshot, PM-due alerts, and (Mondays) the weekly report notice.
+[triggers]
+crons = ["0 11 * * *"]
+
+[observability]
+enabled = true
