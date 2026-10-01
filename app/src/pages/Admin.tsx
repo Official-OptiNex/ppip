@@ -187,6 +187,7 @@ function SystemTab() {
   const load = () => api<SystemInfo>('/admin/system').then(setInfo).catch(toastError);
   useEffect(() => { load(); }, []);
   const partsCount = useStore((s) => Object.keys(s.docs.parts).length);
+  const [erasing, setErasing] = useState(false);
   if (!info) return <Spinner />;
   const pct = info.dbBytes / info.limits.storageBytes;
   const revoke = async (id: string) => { try { await api(`/admin/sessions/${id}`, { method: 'DELETE' }); load(); toast('Signed out that device'); } catch (e) { toastError(e); } };
@@ -228,9 +229,103 @@ function SystemTab() {
       </div>
       <div className="card card-pad row wrap" style={{ justifyContent: 'space-between' }}>
         <div><b>Try it with demo data</b><div className="small muted">Fills an empty database with realistic sample data.</div></div>
-        <button className="btn" onClick={demo} disabled={partsCount > 0}>{partsCount > 0 ? 'Only available when empty' : 'Load demo data'}</button>
+        <button className="btn" onClick={demo} disabled={partsCount > 0}>{partsCount > 0 ? 'Only available when empty (use Erase all data below first)' : 'Load demo data'}</button>
       </div>
+      <div className="card card-pad stack" style={{ borderColor: 'var(--danger-border)' }}>
+        <h3 style={{ color: 'var(--danger)' }}><AlertTriangle size={20} style={{ verticalAlign: -4 }} /> Danger zone</h3>
+        <div className="row wrap" style={{ justifyContent: 'space-between' }}>
+          <div><b>Erase all data</b><div className="small muted">Deletes every part, photo, stock history, PM, knife, roller, order guide, machine and supplier. User accounts, settings and backups are kept.</div></div>
+          <button className="btn danger" onClick={() => setErasing(true)}><Trash2 size={18} />Erase all data…</button>
+        </div>
+      </div>
+      {erasing && <EraseWizard onClose={() => setErasing(false)} onDone={() => { setErasing(false); load(); }} />}
     </div>
+  );
+}
+
+const ERASE_PHRASE = 'DELETE ALL DATA';
+/** Five deliberate steps before everything is wiped. */
+function EraseWizard({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const docs = useStore((s) => s.docs);
+  const counts = useMemo(() => ({ parts: Object.keys(docs.parts).length, pms: Object.keys(docs.pms).length, eq: Object.keys(docs.equipment).length, orders: Object.keys(docs.orders).length }), [docs]);
+  const [step, setStep] = useState(1);
+  const [ack, setAck] = useState({ a: false, b: false, c: false });
+  const [phrase, setPhrase] = useState('');
+  const [pw, setPw] = useState('');
+  const [wait, setWait] = useState(5);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    if (step !== 5) return;
+    setWait(5);
+    const t = setInterval(() => setWait((w) => (w > 0 ? w - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, [step]);
+
+  const erase = async () => {
+    setBusy(true); setErr('');
+    try {
+      await api('/admin/erase', { body: { password: pw, confirm: phrase }, timeout: 120000 });
+      await loadBootstrap();
+      toast('All data erased', 'success', 'A backup was saved first (Admin → Backups → “Before erase”). You can load demo data now.');
+      onDone();
+    } catch (e) { setErr(errorMessage(e)); setStep(4); } finally { setBusy(false); }
+  };
+
+  const canNext = step === 1 ? true : step === 2 ? ack.a && ack.b && ack.c : step === 3 ? phrase === ERASE_PHRASE : step === 4 ? pw.length > 0 : wait === 0;
+  return (
+    <Modal title={`Erase all data — step ${step} of 5`} onClose={onClose} icon={<AlertTriangle color="var(--danger)" />}
+      footer={<>
+        <span className="left">{[1, 2, 3, 4, 5].map((n) => <span key={n} className="dot" style={{ marginRight: 6, background: n <= step ? 'var(--danger)' : 'var(--border-strong)' }} />)}</span>
+        <button className="btn lg" onClick={step === 1 ? onClose : () => setStep(step - 1)} disabled={busy}>{step === 1 ? 'Cancel' : 'Back'}</button>
+        {step < 5
+          ? <button className="btn lg danger" onClick={() => setStep(step + 1)} disabled={!canNext}>Continue</button>
+          : <button className="btn lg danger" onClick={erase} disabled={!canNext || busy}><Trash2 />{busy ? 'Erasing…' : wait > 0 ? `Erase everything (${wait})` : 'Erase everything now'}</button>}
+      </>}>
+      {step === 1 && (
+        <div className="stack">
+          <div className="banner danger"><AlertTriangle />This wipes the database clean.</div>
+          <p style={{ margin: 0 }}>These will be <b>permanently deleted</b> for everyone, on every screen:</p>
+          <ul style={{ margin: 0, paddingLeft: '1.3rem', lineHeight: 1.7 }}>
+            <li><b>{counts.parts}</b> parts, their photos and all stock history</li>
+            <li><b>{counts.pms}</b> PM entries and every machine</li>
+            <li><b>{counts.eq}</b> hot knives and rollers</li>
+            <li><b>{counts.orders}</b> order guides, the activity log and notifications</li>
+            <li>Your suppliers and manufacturers (reset to the built-in list)</li>
+          </ul>
+          <p className="muted" style={{ margin: 0 }}><b>Kept:</b> user accounts, passwords, app settings, print layout and backups.</p>
+        </div>
+      )}
+      {step === 2 && (
+        <div className="stack">
+          <p style={{ margin: 0 }}>Tick each box to confirm you understand:</p>
+          <label className="check"><input type="checkbox" checked={ack.a} onChange={(e) => setAck({ ...ack, a: e.target.checked })} />Everyone using the app will lose this data immediately.</label>
+          <label className="check"><input type="checkbox" checked={ack.b} onChange={(e) => setAck({ ...ack, b: e.target.checked })} />Only a backup can bring it back (one is saved automatically right before erasing).</label>
+          <label className="check"><input type="checkbox" checked={ack.c} onChange={(e) => setAck({ ...ack, c: e.target.checked })} />I really want to erase all data.</label>
+        </div>
+      )}
+      {step === 3 && (
+        <div className="stack">
+          <Field label={<>Type <b className="mono" style={{ color: 'var(--danger)' }}>{ERASE_PHRASE}</b> to confirm</>}>
+            <input className="input mono" value={phrase} onChange={(e) => setPhrase(e.target.value)} autoFocus autoComplete="off" placeholder={ERASE_PHRASE} />
+          </Field>
+          {phrase && phrase !== ERASE_PHRASE && <div className="small muted">Must match exactly, in capitals.</div>}
+        </div>
+      )}
+      {step === 4 && (
+        <div className="stack">
+          <Field label="Enter your password"><input className="input" type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus autoComplete="current-password" /></Field>
+          {err && <div className="banner danger">{err}</div>}
+        </div>
+      )}
+      {step === 5 && (
+        <div className="stack center">
+          <Trash2 size={56} color="var(--danger)" style={{ margin: '0 auto' }} />
+          <h2>Last chance</h2>
+          <p style={{ margin: 0 }}>Clicking the red button erases everything right away. A backup is saved first and appears under <b>Admin → Backups</b> as <b>“Before erase”</b>.</p>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -287,7 +382,7 @@ function BackupsTab() {
               return (
                 <tr key={b.id}>
                   <td><b>{fmtDateTime(b.at)}</b><div className="small muted">{timeAgo(b.at)}</div></td>
-                  <td><span className={`pill ${b.reason === 'auto' ? 'neutral' : b.reason === 'manual' ? 'info' : 'warn'}`}>{b.reason === 'auto' ? 'Daily' : b.reason === 'manual' ? 'Manual' : 'Before restore'}</span></td>
+                  <td><span className={`pill ${b.reason === 'auto' ? 'neutral' : b.reason === 'manual' ? 'info' : 'warn'}`}>{b.reason === 'auto' ? 'Daily' : b.reason === 'manual' ? 'Manual' : b.reason === 'pre-erase' ? 'Before erase' : 'Before restore'}</span></td>
                   <td className="small">{c.parts ?? '?'} parts · {c.equipment ?? 0} knives/rollers · {c.orders ?? 0} orders · {c.movements ?? 0} history rows</td>
                   <td className="num">{bytes(b.size)}</td>
                   <td><div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>

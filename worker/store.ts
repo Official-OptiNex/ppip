@@ -956,6 +956,25 @@ export class Store extends DurableObject<Env> {
       this.restore(u, snap);
       return json({ ok: true });
     }
+    // Erase ALL data (parts, history, PMs, knives/rollers, orders, photos…). Keeps user accounts, settings and backups.
+    if (a === 'erase' && m === 'POST') {
+      const b = await this.body<{ password?: string; confirm?: string }>(req);
+      if (b.confirm !== 'DELETE ALL DATA') throw new HttpError(400, 'Confirmation text does not match.');
+      const row = this.sql.exec(`SELECT pw FROM users WHERE id=?`, u.id).one();
+      if (!(await verifyPassword(b.password || '', row.pw as string))) throw new HttpError(400, 'Your password is not correct.');
+      const backupId = await this.createBackup('pre-erase');
+      const now = Date.now();
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec(`DELETE FROM docs WHERE kind<>'settings'`);
+        for (const t of ['movements', 'activity', 'notifications', 'images', 'uploads']) this.sql.exec(`DELETE FROM ${t}`);
+        this.sql.exec(`INSERT OR REPLACE INTO meta (key,value) VALUES ('orderSeq','0')`);
+        for (const mf of SEED_MANUFACTURERS) this.putDoc('manufacturers', { id: uid(), ...mf, createdAt: now, updatedAt: now });
+        for (const v of SEED_VENDORS) this.putDoc('vendors', { id: uid(), ...v, createdAt: now, updatedAt: now });
+      });
+      this.log(u, 'delete', null, null, `Erased all data (a backup was saved first: ${backupId})`);
+      this.broadcast({ t: 'reload' });
+      return json({ ok: true, backupId });
+    }
     if (a === 'demo' && m === 'POST') {
       if (this.allDocs('parts').length > 0) throw new HttpError(400, 'Demo data can only be loaded into an empty database.');
       const d = demoData();
