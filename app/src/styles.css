@@ -512,3 +512,24 @@ button.list-item { width: 100%; border-left: 0; border-right: 0; border-top: 0; 
 .zpreview .zlabel.is-land { width: 6in; height: 4in; }
 .zpreview .zl-inner.land { transform: none; }
 @media print { .zlabel { border: 0 !important; } }
+
+/* ---------------- Guided tour ---------------- */
+.tour-root { position: fixed; inset: 0; z-index: 400; }
+.tour-block { position: fixed; inset: 0; z-index: 400; }
+.tour-dim { position: fixed; inset: 0; background: rgba(5, 10, 18, 0.62); z-index: 401; }
+.tour-spot { position: fixed; z-index: 401; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(5, 10, 18, 0.62), 0 0 0 3px var(--primary); transition: all 0.2s ease; pointer-events: none; }
+.tour-card { position: fixed; z-index: 402; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 1rem 1.2rem 1.1rem; animation: pop 0.16s ease-out; max-height: calc(100vh - 24px); overflow-y: auto; }
+.tour-dots { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 0.9rem; }
+.tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+.tour-dots i.done { background: color-mix(in srgb, var(--primary) 45%, var(--border-strong)); }
+.tour-dots i.on { background: var(--primary); width: 22px; border-radius: 99px; }
+
+/* "Order now" stock level (red, between running low and out) */
+.dot.order { background: var(--danger); }
+.pill.order { background: var(--danger); color: #fff; border-color: var(--danger); }
+.qty-big.order { color: var(--danger); }
+.filter-chip.order.on { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.tbl tr.st-order td { background: color-mix(in srgb, var(--danger-bg) 55%, var(--surface)); }
+.tbl tr.st-order td:first-child { box-shadow: inset 5px 0 0 var(--danger); }
+.tbl tr.st-order.clickable:hover td { background: var(--danger-bg); }
+.part-card.st-order { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 45%, var(--surface)); }

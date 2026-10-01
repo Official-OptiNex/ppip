@@ -55,7 +55,7 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
   const now = useMemo(() => {
     const list = Object.values(parts);
     return {
-      out: list.filter((p) => stockStatus(p) === 'out').sort((a, b) => a.name.localeCompare(b.name)),
+      out: list.filter((p) => stockStatus(p) === 'out' || stockStatus(p) === 'order').sort((a, b) => a.name.localeCompare(b.name)),
       low: list.filter((p) => stockStatus(p) === 'low').sort((a, b) => a.name.localeCompare(b.name)),
     };
   }, [parts]);
@@ -123,8 +123,8 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
         </Section>
 
         <div className="grid-cards">
-          <Section title={<><XCircle size={18} color="var(--danger)" style={{ verticalAlign: -3 }} /> Out of stock right now</>} empty="Nothing is out of stock.">
-            {now.out.length > 0 && <table className="tbl"><tbody>{now.out.map((p) => <tr key={p.id} className="st-out"><td><b>{p.name}</b><div className="small muted">{[p.partNumber, p.vendor].filter(Boolean).join(' · ')}</div></td></tr>)}</tbody></table>}
+          <Section title={<><XCircle size={18} color="var(--danger)" style={{ verticalAlign: -3 }} /> Out of stock / order now</>} empty="Nothing is out of stock.">
+            {now.out.length > 0 && <table className="tbl"><tbody>{now.out.map((p) => <tr key={p.id} className={`st-${stockStatus(p)}`}><td><b>{p.name}</b> <span className="muted">({p.qty} left)</span><div className="small muted">{[p.partNumber, p.vendor].filter(Boolean).join(' · ')}</div></td></tr>)}</tbody></table>}
           </Section>
           <Section title={<><AlertTriangle size={18} color="var(--warn)" style={{ verticalAlign: -3 }} /> Running low right now</>} empty="Nothing is running low.">
             {now.low.length > 0 && <table className="tbl"><tbody>{now.low.map((p) => <tr key={p.id} className="st-low"><td><b>{p.name}</b><div className="small muted">{p.partNumber}</div></td><td className="num"><b>{p.qty}</b> / {p.minQty}</td></tr>)}</tbody></table>}

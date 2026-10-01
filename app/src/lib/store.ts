@@ -308,6 +308,9 @@ function handleMessage(msg: Record<string, unknown>) {
     case 'presence': setState({ online: msg.online as State['online'] }); break;
     case 'users': setState((s) => ({ users: s.me?.role === 'admin' ? mergeUsers(s.users, msg.users as PublicUser[]) : (msg.users as PublicUser[]) })); break;
     case 'reload': loadBootstrap().catch(() => {}); break;
+    case 'tour': // an admin turned the guided tour on for this account
+      if (state.me) setState({ me: { ...state.me, prefs: { ...state.me.prefs, tutorialDone: false } } });
+      break;
     case 'phoneUpload': setState((s) => ({ phoneUploads: { ...s.phoneUploads, [msg.code as string]: msg.imageId as string } })); break;
     case 'notification': {
       const n = msg.row as AppNotification;

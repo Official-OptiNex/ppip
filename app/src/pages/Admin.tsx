@@ -9,6 +9,8 @@ import { saveDoc, setState, toast, toastError, useIsAdmin, useStore, loadBootstr
 import { bytes, fmtDateTime, navigate, timeAgo, download } from '../lib/util';
 import { Field, Modal, NumberInput, Tabs, confirmDialog, Spinner, Seg } from '../components/ui';
 import { OrderSheet } from './Orders';
+import { startTour } from '../components/Tour';
+import { GraduationCap, Play } from 'lucide-react';
 
 type Tab = 'users' | 'system' | 'backups' | 'settings' | 'print';
 
@@ -55,9 +57,31 @@ function UsersTab() {
   const toggleActive = async (u: PublicUser) => {
     try { await api(`/admin/users/${u.id}`, { method: 'PATCH', body: { active: !u.active } }); toast(u.active ? `${u.name} deactivated` : `${u.name} reactivated`); load(); } catch (e) { toastError(e); }
   };
+  const sendTour = async (target: { userId?: string; role?: Role | 'all' }, label: string) => {
+    try {
+      const r = await api<{ count: number; online: number }>('/admin/tour', { body: target });
+      toast(`Tour turned on for ${label}`, 'success', `${r.count} account${r.count === 1 ? '' : 's'}${r.online ? ` · opens now for ${r.online} online` : ''} · otherwise at next sign-in`);
+    } catch (e) { toastError(e); }
+  };
   if (!users) return <Spinner />;
   return (
     <div className="stack">
+      <div className="card card-pad stack">
+        <h3><GraduationCap size={20} style={{ verticalAlign: -4 }} /> Guided tour</h3>
+        <p className="muted" style={{ margin: 0 }}>Everyone sees the tour on their first sign-in. Turn it on again for anyone here — it opens right away if they're online, otherwise next time they sign in.</p>
+        <div className="row wrap">
+          <span className="label" style={{ minWidth: 110 }}>Show it to:</span>
+          <button className="btn" onClick={() => sendTour({ role: 'viewer' }, 'all viewers')}><Eye size={17} />All viewers</button>
+          <button className="btn" onClick={() => sendTour({ role: 'editor' }, 'all editors')}><PenLine size={17} />All editors</button>
+          <button className="btn" onClick={() => sendTour({ role: 'admin' }, 'all admins')}><ShieldCheck size={17} />All admins</button>
+          <button className="btn" onClick={() => sendTour({ role: 'all' }, 'everyone')}><Users size={17} />Everyone</button>
+        </div>
+        <div className="row wrap">
+          <span className="label" style={{ minWidth: 110 }}>Preview here as:</span>
+          {(['viewer', 'editor', 'admin'] as Role[]).map((r) => <button key={r} className="btn" onClick={() => startTour(r)}><Play size={16} />{ROLE_INFO[r].label}</button>)}
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>Use the 🎓 button on a person below to show it to just them.</p>
+      </div>
       <div className="row wrap" style={{ justifyContent: 'space-between' }}>
         <div className="row wrap" style={{ gap: '0.5rem' }}>{(['viewer', 'editor', 'admin'] as Role[]).map((r) => <span key={r} className={`pill ${ROLE_INFO[r].cls}`} title={ROLE_INFO[r].desc}>{ROLE_INFO[r].icon}{ROLE_INFO[r].label}: {users.filter((u) => u.role === r).length}</span>)}</div>
         <button className="btn primary lg" onClick={() => setEdit({ role: 'editor' })}><UserPlus />Add person</button>
@@ -75,6 +99,7 @@ function UsersTab() {
                 <td>{u.active ? 'Active' : 'Deactivated'}</td>
                 <td>
                   <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
+                    <button className="btn sm icon" title={`Show the guided tour to ${u.name}`} aria-label={`Show tour to ${u.name}`} onClick={() => sendTour({ userId: u.id }, u.name)} disabled={!u.active}><GraduationCap size={17} /></button>
                     <button className="btn sm" onClick={() => setEdit(u)}><Pencil size={16} />Edit</button>
                     {u.id !== me?.id && <button className="btn sm" onClick={() => toggleActive(u)}>{u.active ? 'Deactivate' : 'Reactivate'}</button>}
                     {u.id !== me?.id && <button className="btn sm icon ghost" onClick={() => remove(u)} aria-label="Delete"><Trash2 size={17} /></button>}

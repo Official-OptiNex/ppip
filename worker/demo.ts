@@ -99,7 +99,6 @@ export function demoData() {
       machine: installed ? machines[i % 6].name : '', position: installed ? pick(['Infeed', 'Outfeed', 'Upper', 'Lower']) : '',
       installedAt: installed ? now - Math.floor(rnd() * 240 + 5) * DAY : null, pmDays: 180,
       construction: i % 2 ? 'segmented' : 'solid', rollerType: rollerTypes[i % 5], diameter: [3, 4, 4.5, 6][i % 4], length: [24, 36, 48][i % 3],
-      covering: pick(['Silicone 60A', 'EPDM 70A', 'Urethane 80A', 'Steel chrome']),
     });
   }
 

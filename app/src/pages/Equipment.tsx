@@ -18,8 +18,8 @@ export function describe(e: Equipment) {
   }
   const cons = e.construction === 'segmented' ? 'Segmented' : e.construction === 'solid' ? 'Solid' : '';
   const kind = e.rollerType ? `${e.rollerType[0].toUpperCase()}${e.rollerType.slice(1)} roller` : 'Roller';
-  const size = [e.diameter && `Ø${e.diameter}"`, e.length && `${e.length}" long`].filter(Boolean).join(' × ');
-  return [cons, kind, size, e.covering].filter(Boolean).join(' · ');
+  const size = [e.diameter && `${e.diameter}" OD`, e.length && `${e.length}" long`].filter(Boolean).join(' × ');
+  return [cons, kind, size].filter(Boolean).join(' · ');
 }
 
 export function EquipmentPage({ type, query }: { type: EquipmentType; query: URLSearchParams }) {
@@ -85,7 +85,7 @@ export function EquipmentPage({ type, query }: { type: EquipmentType; query: URL
         </div>
       </div>
 
-      <div className="tiles" style={{ marginBottom: '1rem' }}>
+      <div className="tiles" style={{ marginBottom: '1rem' }} data-tour="eq-add">
                 <button className="tile warn" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'repair' })}><span className="t-label">In repair</span><span className="t-value">{counts.repair}</span><span className="t-sub">out for rebuild</span></button>
         <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'retired' })}><span className="t-label">Retired</span><span className="t-value">{counts.retired}</span><span className="t-sub">scrapped</span></button>
         <button className="tile info" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'installed' })}><span className="t-label">On machines</span><span className="t-value">{counts.installed}</span><span className="t-sub">in service now</span></button>
@@ -153,6 +153,13 @@ function PmBar({ pm }: { pm: ReturnType<typeof pmState> }) {
 }
 
 type ActionKind = 'install' | 'move' | 'remove' | 'service' | 'retire' | 'spare';
+
+/** Permanently delete a knife / roller (asks first). Returns true when deleted. */
+async function deleteForever(e: Equipment) {
+  const what = e.type === 'knife' ? 'hot knife' : 'roller';
+  if (!(await confirmDialog({ title: `Permanently delete ${what} ${e.tag}?`, body: <>It is removed completely and can't be brought back from this screen (only from a backup). Its history stays in the activity log.<br /><br />To keep it on record instead, use <b>Retire / scrap</b>.</>, confirm: 'Delete permanently', danger: true }))) return false;
+  try { await deleteDoc('equipment', e.id); toast(`${e.tag} deleted`); return true; } catch (err) { toastError(err); return false; }
+}
 function Actions({ e, canEdit, onAction, onEdit }: { e: Equipment; canEdit: boolean; onAction: (k: ActionKind) => void; onEdit: () => void }) {
   if (!canEdit) return null;
   return (
@@ -166,6 +173,8 @@ function Actions({ e, canEdit, onAction, onEdit }: { e: Equipment; canEdit: bool
           {e.status === 'repair' && <button onClick={() => { close(); onAction('spare'); }}><CheckCircle2 size={18} />Back from repair (spare)</button>}
           <button onClick={() => { close(); onEdit(); }}><Pencil size={18} />Edit details</button>
           {e.status !== 'retired' && <button onClick={() => { close(); onAction('retire'); }}><Archive size={18} />Retire / scrap</button>}
+          <hr />
+          <button className="danger" onClick={() => { close(); deleteForever(e); }}><Trash2 size={18} />Delete permanently</button>
         </>}
       </Menu>
     </div>
@@ -214,10 +223,7 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
     api<Activity[]>(`/activity?refId=${encodeURIComponent(e.id)}&limit=200`).then((r) => { if (alive) setHist(r); }).catch(() => { if (alive) setHist([]); });
     return () => { alive = false; };
   }, [e.id, e.updatedAt]);
-  const remove = async () => {
-    if (!(await confirmDialog({ title: `Delete ${e.tag}?`, body: 'This removes it completely, including its history. To keep history, use “Retire” instead.', confirm: 'Delete', danger: true }))) return;
-    try { await deleteDoc('equipment', e.id); toast('Deleted'); onClose(); } catch (err) { toastError(err); }
-  };
+  const remove = async () => { if (await deleteForever(e)) onClose(); };
   return (
     <Drawer onClose={onClose} head={<div className="row"><span className={`pill ${STATUS_CLS[e.status]}`}>{STATUS_LABEL[e.status]}</span>{pm.state === 'due' && <span className="pill danger">PM due</span>}{pm.state === 'soon' && <span className="pill warn">PM soon</span>}</div>}>
       <div className="stack">
@@ -242,6 +248,8 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
             </> : e.status !== 'retired' && <button className="btn primary lg" onClick={() => onAction('install')}><LogIn />Install on machine</button>}
             {e.status === 'repair' && <button className="btn lg" onClick={() => onAction('spare')}><CheckCircle2 />Back from repair</button>}
             <button className="btn lg" onClick={onEdit}><Pencil />Edit</button>
+            {e.status !== 'retired' && <button className="btn lg" onClick={() => onAction('retire')}><Archive />Retire</button>}
+            <button className="btn lg danger-ghost" onClick={remove}><Trash2 />Delete</button>
           </div>
         )}
         <div className="card card-pad">
@@ -252,8 +260,8 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
             </> : <>
               <dt>Construction</dt><dd style={{ textTransform: 'capitalize' }}>{e.construction || '—'}</dd>
               <dt>Roller type</dt><dd style={{ textTransform: 'capitalize' }}>{e.rollerType || '—'}</dd>
-              <dt>Size</dt><dd>{[e.diameter && `Ø ${e.diameter}"`, e.length && `${e.length}" long`].filter(Boolean).join(' × ') || '—'}</dd>
-              <dt>Covering</dt><dd>{e.covering || '—'}</dd>
+              <dt>Outer diameter</dt><dd>{e.diameter ? `${e.diameter}"` : '—'}</dd>
+              <dt>Roller length</dt><dd>{e.length ? `${e.length}"` : '—'}</dd>
             </>}
           </dl>
           {e.notes && <><hr className="divider" /><div style={{ whiteSpace: 'pre-wrap' }}>{e.notes}</div></>}
@@ -266,7 +274,6 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
             )}
           </div>
         </div>
-        {canEdit && <button className="btn danger-ghost" onClick={remove}><Trash2 size={18} />Delete</button>}
       </div>
     </Drawer>
   );
@@ -365,9 +372,8 @@ function EquipmentForm({ type, item, onClose }: { type: EquipmentType; item?: Eq
                 <option value="nip">Nip roller</option><option value="draw">Draw roller</option><option value="idler">Idler</option><option value="other">Other</option>
               </select>
             </Field>
-            <Field label="Diameter (in)"><NumberInput value={d.diameter} onChange={(v) => set('diameter', v)} /></Field>
-            <Field label="Face length (in)"><NumberInput value={d.length} onChange={(v) => set('length', v)} /></Field>
-            <Field label="Covering / material"><Combobox value={d.covering || ''} onChange={(v) => set('covering', v)} options={['Silicone', 'EPDM', 'Urethane', 'Nitrile', 'Neoprene', 'Steel chrome', 'Aluminum', 'Rubber']} placeholder="e.g. Silicone 60A" /></Field>
+            <Field label="Outer diameter (in, optional)"><NumberInput value={d.diameter} onChange={(v) => set('diameter', v)} min={0} placeholder='e.g. 4.5' /></Field>
+            <Field label="Roller length (in)"><NumberInput value={d.length} onChange={(v) => set('length', v)} min={0} placeholder='e.g. 36' /></Field>
           </>}
         </div>
         {dupTag && <div className="banner warn" style={{ marginTop: '1rem' }}>Another {type === 'knife' ? 'knife' : 'roller'} already uses this tag.</div>}

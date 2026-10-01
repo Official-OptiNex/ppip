@@ -3,6 +3,7 @@ import { useStore } from './lib/store';
 import { useRoute, setCurrency } from './lib/util';
 import { Layout } from './components/Layout';
 import { ConfirmHost, Toasts, Spinner } from './components/ui';
+import { TourHost } from './components/Tour';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { PartsPage } from './pages/Parts';
@@ -65,6 +66,7 @@ export function App() {
       </Layout>
       <Toasts />
       <ConfirmHost />
+      <TourHost />
     </>
   );
 }

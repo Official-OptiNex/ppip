@@ -91,7 +91,7 @@ export function avatarColor(s: string) {
 }
 
 // ------------------------------------------------------------ domain helpers
-export const STATUS_LABEL: Record<StockStatus, string> = { ok: 'In stock', low: 'Running low', out: 'Out of stock', retired: 'Decommissioned' };
+export const STATUS_LABEL: Record<StockStatus, string> = { ok: 'In stock', low: 'Running low', order: 'Order now', out: 'Out of stock', retired: 'Decommissioned' };
 export { stockStatus };
 export function partValue(p: Part) { return (p.unitCost || 0) * Math.max(0, p.qty || 0); }
 export function reorderQty(p: Part) {

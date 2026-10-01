@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   LayoutDashboard, Package, ClipboardList, Flame, CircleDot, BarChart3, FileText, Truck, Tag, ArrowLeftRight, History, ShieldCheck,
-  HelpCircle, Wrench, Sun, Moon, Bell, Menu as MenuIcon, LogOut, UserCircle2, Search, Plus, X, Wifi, WifiOff, AlertTriangle, XCircle, CheckCircle2, Info, MoreHorizontal,
+  HelpCircle, ShoppingCart, Wrench, Sun, Moon, Bell, Menu as MenuIcon, LogOut, UserCircle2, Search, Plus, X, Wifi, WifiOff, AlertTriangle, XCircle, CheckCircle2, Info, MoreHorizontal,
 } from 'lucide-react';
 import { useStore, logout, markNotificationsSeen, can } from '../lib/store';
 import { stockStatus, matches, avatarColor, initials, timeAgo, navigate } from '../lib/util';
@@ -43,7 +43,7 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
   const pmOverdue = pmStates.some((s) => s.status === 'overdue');
   const counts = useMemo(() => {
     let low = 0, out = 0;
-    for (const p of Object.values(parts)) { const st = stockStatus(p); if (st === 'low') low++; else if (st === 'out') out++; }
+    for (const p of Object.values(parts)) { const st = stockStatus(p); if (st === 'low') low++; else if (st === 'out' || st === 'order') out++; }
     return { low, out };
   }, [parts]);
   useEffect(() => setNavOpen(false), [path]);
@@ -61,11 +61,11 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
           </div>
           <button className="btn icon ghost mobile-only" onClick={() => setNavOpen(false)} aria-label="Close menu"><X /></button>
         </div>
-        <nav className="nav">
+        <nav className="nav" data-tour="nav">
           {NAV.filter((n) => !n.admin || me?.role === 'admin').map((n) => {
             const header = n.group && n.group !== lastGroup ? <div className="nav-label" key={`g-${n.group}`}>{n.group}</div> : null;
             if (n.group) lastGroup = n.group;
-            const badge = n.to === '/parts' ? (counts.out ? <span className="count danger" title="Out of stock">{counts.out}</span> : counts.low ? <span className="count warn" title="Running low">{counts.low}</span> : null)
+            const badge = n.to === '/parts' ? (counts.out ? <span className="count danger" title="Out of stock or order now">{counts.out}</span> : counts.low ? <span className="count warn" title="Running low">{counts.low}</span> : null)
               : n.to === '/pms' && pmDue ? <span className={`count ${pmOverdue ? 'danger' : 'warn'}`} title="PMs due">{pmDue}</span> : null;
             return [header, (
               <a key={n.to} href={`#${n.to}`} className={isActive(n.to, path) ? 'active' : ''} aria-current={isActive(n.to, path) ? 'page' : undefined}>
@@ -113,7 +113,7 @@ function ThemeToggle() {
   const theme = useStore((s) => s.me?.prefs?.theme);
   const dark = theme !== 'light' && (theme !== 'system' || matchMedia('(prefers-color-scheme: dark)').matches);
   return (
-    <button className="btn icon ghost" onClick={() => savePrefs({ theme: dark ? 'light' : 'dark' })}
+    <button className="btn icon ghost" data-tour="theme" onClick={() => savePrefs({ theme: dark ? 'light' : 'dark' })}
       aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
       {dark ? <Sun size={22} /> : <Moon size={22} />}
     </button>
@@ -126,7 +126,7 @@ function ConnectionPill() {
   const label = conn === 'live' ? 'Live' : conn === 'connecting' ? 'Connecting…' : 'Offline';
   const title = conn === 'live' ? 'Connected — changes from everyone appear instantly.' : conn === 'offline' ? 'No connection. You can keep working; changes sync when the connection returns.' : 'Reconnecting to the server…';
   return (
-    <span className={`conn ${conn}`} title={title} role="status">
+    <span className={`conn ${conn}`} title={title} role="status" data-tour="live">
       {conn === 'offline' ? <WifiOff size={16} /> : conn === 'live' ? <span className="dot" /> : <Wifi size={16} />}
       <span className="desktop-only">{label}{isFileMode ? ' · USB' : ''}</span>
       {outbox > 0 && <span title="Changes waiting to sync">· {outbox} to sync</span>}
@@ -158,8 +158,9 @@ function Notifications() {
   const attention = useMemo(() => {
     const list = Object.values(parts);
     const out = list.filter((p) => stockStatus(p) === 'out').length;
+    const order = list.filter((p) => stockStatus(p) === 'order').length;
     const low = list.filter((p) => stockStatus(p) === 'low').length;
-    return { out, low, due: pmDueCount(pmStates) };
+    return { out, order, low, due: pmDueCount(pmStates) };
   }, [parts, pmStates]);
   useEffect(() => {
     if (!open) return;
@@ -169,9 +170,9 @@ function Notifications() {
   }, [open]);
   const toggle = () => { if (!open && unread) markNotificationsSeen(); setOpen(!open); };
   const Icon = (l: string) => l === 'danger' ? <XCircle size={19} /> : l === 'warn' ? <AlertTriangle size={19} /> : l === 'success' ? <CheckCircle2 size={19} /> : <Info size={19} />;
-  const badge = unread || attention.out;
+  const badge = unread || attention.out + attention.order;
   return (
-    <div className="pop-anchor" ref={ref}>
+    <div className="pop-anchor" ref={ref} data-tour="alerts">
       <button className="btn icon ghost" onClick={toggle} aria-label={`Notifications${badge ? ` (${badge})` : ''}`} style={{ position: 'relative' }}>
         <Bell size={22} />
         {badge > 0 && <span className="badge-dot">{badge > 99 ? '99+' : badge}</span>}
@@ -181,6 +182,7 @@ function Notifications() {
           <div className="card-head"><h3>Alerts & notifications</h3></div>
           <div className="list" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {attention.out > 0 && <a className="list-item" href="#/parts?status=out"><span className="li-icon danger"><XCircle size={19} /></span><div className="grow"><b>{attention.out} part{attention.out > 1 ? 's' : ''} out of stock</b><div className="small muted">Tap to see the list and reorder</div></div></a>}
+            {attention.order > 0 && <a className="list-item" href="#/parts?status=order"><span className="li-icon danger"><ShoppingCart size={19} /></span><div className="grow"><b>{attention.order} part{attention.order > 1 ? 's' : ''} need ordering now</b><div className="small muted">Almost gone — order today</div></div></a>}
             {attention.low > 0 && <a className="list-item" href="#/parts?status=low"><span className="li-icon warn"><AlertTriangle size={19} /></span><div className="grow"><b>{attention.low} part{attention.low > 1 ? 's' : ''} running low</b><div className="small muted">At or below the reorder point</div></div></a>}
             {attention.due > 0 && <a className="list-item" href="#/pms"><span className="li-icon warn"><Wrench size={19} /></span><div className="grow"><b>{attention.due} machine PM{attention.due > 1 ? 's' : ''} due</b><div className="small muted">Overdue or due today</div></div></a>}
             {notifications.length === 0 && !attention.out && !attention.low && <div className="empty small">No notifications yet.</div>}
@@ -245,7 +247,7 @@ function GlobalSearch() {
   let idx = -1;
 
   return (
-    <div className="grow pop-anchor" ref={wrap} style={{ maxWidth: 640 }}>
+    <div className="grow pop-anchor" ref={wrap} style={{ maxWidth: 640 }} data-tour="search">
       <div className="input-wrap">
         <Search size={20} />
         <input ref={inputRef} className="input" value={q} placeholder="Search parts, part #, knives, rollers, orders…" aria-label="Search everything"

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { LogOut, KeyRound, Sun, Moon, Monitor, Bell, Save } from 'lucide-react';
+import { startTour } from '../components/Tour';
+import { GraduationCap, LogOut, KeyRound, Sun, Moon, Monitor, Bell, Save } from 'lucide-react';
 import { api, errorMessage, isFileMode } from '../lib/api';
 import { logout, savePrefs, toast, useStore } from '../lib/store';
 import { avatarColor, initials } from '../lib/util';
@@ -36,7 +37,7 @@ export function ProfilePage() {
         <div><h1>{me.name}</h1><div className="muted">{me.email} · <span style={{ textTransform: 'capitalize' }}>{me.role}</span></div></div>
       </div>
 
-      <div className="card card-pad stack">
+      <div className="card card-pad stack" data-tour="text-size">
         <h2>Text size</h2>
         <p className="muted" style={{ margin: 0 }}>Makes everything bigger or smaller on this account. Saved for you on every computer.</p>
         <div className="grid-3">
@@ -66,6 +67,11 @@ export function ProfilePage() {
         {err && <div className="banner danger">{err}</div>}
         <div><button className="btn primary" disabled={busy}><Save size={18} />Change password</button></div>
       </form>
+
+      <div className="card card-pad row wrap" style={{ justifyContent: 'space-between' }}>
+        <div><b>Guided tour</b><div className="small muted">A 2-minute walk through the app.</div></div>
+        <button className="btn lg" onClick={() => startTour()}><GraduationCap />Take the tour</button>
+      </div>
 
       <div className="card card-pad row wrap" style={{ justifyContent: 'space-between' }}>
         <div><b>Sign out</b><div className="small muted">{isFileMode ? 'Running from USB.' : 'Signs out on this device only.'}</div></div>

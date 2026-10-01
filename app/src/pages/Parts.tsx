@@ -9,11 +9,12 @@ import { deleteDoc, saveDoc, toast, toastError, useCanEdit, useStore, newId, get
 import {
   stockStatus, matches, uniqueSorted, money, navigate, setQuery, timeAgo, fmtDateTime, partValue, reorderQty, STATUS_LABEL, download, toCSV, useDebounced,
 } from '../lib/util';
+import { needsReorder } from '../../../shared/types';
 import { Drawer, Empty, Menu, SearchInput, StatusPill, Thumb, confirmDialog, Spinner } from '../components/ui';
 import { PartForm, StockDialog, type StockMode } from '../components/PartDialogs';
 
 type SortKey = 'name' | 'partNumber' | 'manufacturer' | 'category' | 'location' | 'qty' | 'status' | 'vendor' | 'unitCost' | 'updatedAt';
-const STATUS_ORDER = { out: 0, low: 1, ok: 2, retired: 3 };
+const STATUS_ORDER = { out: 0, order: 1, low: 2, ok: 3, retired: 4 };
 
 export function PartsPage({ openId, query }: { openId?: string; query: URLSearchParams }) {
   const parts = useStore((s) => s.docs.parts);
@@ -41,7 +42,7 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
   }), [all]);
 
   const counts = useMemo(() => {
-    const c = { all: 0, ok: 0, low: 0, out: 0, retired: 0 };
+    const c = { all: 0, ok: 0, low: 0, order: 0, out: 0, retired: 0 };
     for (const p of all) { const s = stockStatus(p); c[s]++; if (s !== 'retired') c.all++; }
     return c;
   }, [all]);
@@ -50,8 +51,8 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
     const list = all.filter((p) => {
       const s = stockStatus(p);
       if (status === 'active' && s === 'retired') return false;
-      if (status === 'reorder' && s !== 'low' && s !== 'out') return false;
-      if (['ok', 'low', 'out', 'retired'].includes(status) && s !== status) return false;
+      if (status === 'reorder' && !needsReorder(s)) return false;
+      if (['ok', 'low', 'order', 'out', 'retired'].includes(status) && s !== status) return false;
       if (f.mfr && p.manufacturer !== f.mfr) return false;
       if (f.cat && p.category !== f.cat) return false;
       if (f.loc && p.location !== f.loc) return false;
@@ -97,12 +98,12 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
       <div className="page-head">
         <div>
           <h1>Parts</h1>
-          <div className="sub">{counts.all} active parts · <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{counts.out} out</span> · <span style={{ color: 'var(--warn)', fontWeight: 700 }}>{counts.low} low</span></div>
+          <div className="sub">{counts.all} active parts · <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{counts.out} out</span> · <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{counts.order} order now</span> · <span style={{ color: 'var(--warn)', fontWeight: 700 }}>{counts.low} low</span></div>
         </div>
         <div className="btn-group">
-          {(counts.low + counts.out > 0) && canEdit && <a className="btn" href="#/orders/new?from=low"><ShoppingCart size={19} />Order low stock</a>}
+          {(counts.low + counts.order + counts.out > 0) && canEdit && <a className="btn" href="#/orders/new?from=low"><ShoppingCart size={19} />Order low stock</a>}
           <button className="btn" onClick={exportView} title="Download this list as CSV (opens in Excel)"><Download size={19} /><span className="desktop-only">Export list</span></button>
-          {canEdit && <button className="btn primary lg" onClick={() => setEditing('new')}><Plus size={22} />Add part</button>}
+          {canEdit && <button className="btn primary lg" data-tour="add-part" onClick={() => setEditing('new')}><Plus size={22} />Add part</button>}
         </div>
       </div>
 
@@ -113,10 +114,10 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
             <SlidersHorizontal size={19} /><span className="desktop-only">Filters</span>{activeFilters > 0 && ` (${activeFilters})`}
           </button>
         </div>
-        <div className="chips scroll" role="group" aria-label="Stock status">
+        <div className="chips scroll" data-tour="status-chips" role="group" aria-label="Stock status">
           {([
             ['active', 'All active', counts.all, ''], ['ok', 'In stock', counts.ok, 'ok'], ['low', 'Running low', counts.low, 'low'],
-            ['out', 'Out of stock', counts.out, 'out'], ['reorder', 'Needs reorder', counts.low + counts.out, 'low'], ['retired', 'Decommissioned', counts.retired, ''], ['all', 'Everything', all.length, ''],
+            ['order', 'Order now', counts.order, 'order'], ['out', 'Out of stock', counts.out, 'out'], ['reorder', 'Needs reorder (all)', counts.low + counts.order + counts.out, 'low'], ['retired', 'Decommissioned', counts.retired, ''], ['all', 'Everything', all.length, ''],
           ] as const).map(([id, label, n, cls]) => (
             <button key={id} className={`filter-chip ${cls} ${status === id ? 'on' : ''}`} onClick={() => setQuery({ status: id === 'active' ? null : id })} aria-pressed={status === id}>
               {cls && <span className={`dot ${cls}`} />}{label}<span className="n">{n}</span>
@@ -153,7 +154,7 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
         </Empty></div>
       ) : (
         <>
-          <div className="table-wrap desktop-only">
+          <div className="table-wrap desktop-only" data-tour="parts-list">
             <table className="tbl">
               <thead>
                 <tr>
@@ -161,7 +162,7 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
                   <Th k="name">Part</Th>
                   <Th k="partNumber">Part #</Th>
                   <Th k="manufacturer">Manufacturer</Th>
-                  <Th k="location">Location</Th>
+                  <Th k="location" className="hide-md">Location</Th>
                   <Th k="status" className="num">In stock</Th>
                   <th className="right">Actions</th>
                 </tr>
@@ -181,7 +182,7 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
                       </td>
                       <td className="mono">{p.partNumber || '—'}</td>
                       <td>{p.manufacturer || '—'}</td>
-                      <td>{p.location || '—'}</td>
+                      <td className="hide-md">{p.location || '—'}</td>
                       <td className="num">
                         <div className="qty-cell">
                           <span className={`qty-big ${st}`}>{p.qty}</span>
@@ -207,7 +208,7 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
             </table>
           </div>
 
-          <div className="part-cards mobile-only">
+          <div className="part-cards mobile-only" data-tour="parts-list">
             {filtered.slice(0, limit).map((p) => {
               const st = stockStatus(p);
               return (
@@ -220,7 +221,7 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
                   </div>
                   <div className="col" style={{ alignItems: 'flex-end', gap: 4 }}>
                     <span className={`qty-big ${st}`}>{p.qty}</span>
-                    <span className={`pill ${st}`} style={{ fontSize: '0.75rem' }}>{st === 'ok' ? 'OK' : st === 'low' ? 'Low' : st === 'out' ? 'Out' : 'Retired'}</span>
+                    <span className={`pill ${st}`} style={{ fontSize: '0.75rem' }}>{st === 'ok' ? 'OK' : st === 'low' ? 'Low' : st === 'order' ? 'Order' : st === 'out' ? 'Out' : 'Retired'}</span>
                   </div>
                 </div>
               );
@@ -256,11 +257,17 @@ function RowMenu({ p, canEdit, onEdit, onStock, onCopy }: { p: Part; canEdit: bo
         {canEdit && <button onClick={() => { close(); onCopy(); }}><Copy size={18} />Duplicate</button>}
         <a href={`#/labels?ids=${p.id}`} onClick={close}><Tag size={18} />Print label</a>
         <a href={`#/parts/${p.id}`} onClick={close}><History size={18} />History</a>
-        {canEdit && <><hr /><DecommissionButton p={p} close={close} /></>}
+        {canEdit && <><hr /><DecommissionButton p={p} close={close} />
+          <button className="danger" onClick={() => { close(); deletePartForever(p); }}><Trash2 size={18} />Delete permanently</button></>}
       </>}
     </Menu>
   );
 }
+async function deletePartForever(p: Part) {
+  if (!(await confirmDialog({ title: `Permanently delete “${p.name}”?`, body: <>The part and its photo are removed for good (only a backup can bring it back). Past usage stays in reports.<br /><br />If you just don't use it anymore, <b>Decommission</b> it instead.</>, confirm: 'Delete permanently', danger: true }))) return false;
+  try { await deleteDoc('parts', p.id); toast('Part deleted'); return true; } catch (e) { toastError(e); return false; }
+}
+
 function DecommissionButton({ p, close }: { p: Part; close: () => void }) {
   return (
     <button onClick={async () => {
@@ -287,14 +294,11 @@ function PartDrawer({ part: p, onClose, onEdit, onStock, onCopy }: { part: Part;
 
   const used90 = useMemo(() => (history || []).filter((m) => m.kind === 'use' && m.at > Date.now() - 90 * 86400000).reduce((s, m) => s - m.delta, 0), [history]);
 
-  const remove = async () => {
-    if (!(await confirmDialog({ title: 'Delete this part?', body: <>“{p.name}” and its photo will be removed. Usage history stays in reports.<br /><br />Tip: if you just don't use it anymore, <b>Decommission</b> it instead.</>, confirm: 'Delete part', danger: true }))) return;
-    try { await deleteDoc('parts', p.id); toast('Part deleted'); onClose(); } catch (e) { toastError(e); }
-  };
+  const remove = async () => { if (await deletePartForever(p)) onClose(); };
   const addToOrder = () => {
     const s = getState();
     const draft = Object.values(s.docs.orders).find((o) => o.status === 'draft');
-    const item = { partId: p.id, name: p.name, partNumber: p.vendorPartNumber || p.partNumber, manufacturer: p.manufacturer, vendor: p.vendor, qty: reorderQty(p), unit: p.unit, unitCost: p.unitCost, url: p.orderUrl, reason: st === 'out' ? 'Out of stock' : st === 'low' ? 'Running low' : '' };
+    const item = { partId: p.id, name: p.name, partNumber: p.vendorPartNumber || p.partNumber, manufacturer: p.manufacturer, vendor: p.vendor, qty: reorderQty(p), unit: p.unit, unitCost: p.unitCost, url: p.orderUrl, reason: st === 'out' ? 'Out of stock' : st === 'order' ? 'Order now' : st === 'low' ? 'Running low' : '' };
     if (draft) {
       saveDoc('orders', draft.id, { items: [...draft.items, item] }).then(() => toast(`Added to ${draft.number}`, 'success', undefined, `#/orders/${draft.id}`)).catch(toastError);
     } else {
@@ -343,7 +347,7 @@ function PartDrawer({ part: p, onClose, onEdit, onStock, onCopy }: { part: Part;
               <button onClick={() => { close(); onCopy(); }}><Copy size={18} />Duplicate</button>
               <DecommissionButton p={p} close={close} />
               <hr />
-              <button className="danger" onClick={() => { close(); remove(); }}><Trash2 size={18} />Delete part</button>
+              <button className="danger" onClick={() => { close(); remove(); }}><Trash2 size={18} />Delete permanently</button>
             </>}
           </Menu>}
         </div>

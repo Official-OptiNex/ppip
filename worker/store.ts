@@ -214,8 +214,9 @@ export class Store extends DurableObject<Env> {
     if (after === before) return;
     const where = p.location ? ` · ${p.location}` : '';
     if (after === 'out') this.notify('danger', `OUT OF STOCK: ${p.name}`, `${p.partNumber ? `#${p.partNumber} · ` : ''}0 ${p.unit || 'ea'} left${where}`, `#/parts/${p.id}`);
+    else if (after === 'order') this.notify('danger', `ORDER NOW: ${p.name}`, `Only ${p.qty} ${p.unit || 'ea'} left${where}`, `#/parts/${p.id}`);
     else if (after === 'low') this.notify('warn', `Running low: ${p.name}`, `${p.qty} ${p.unit || 'ea'} left (reorder at ${p.minQty})${where}`, `#/parts/${p.id}`);
-    else if (after === 'ok' && (before === 'out' || before === 'low')) this.notify('success', `Restocked: ${p.name}`, `${p.qty} ${p.unit || 'ea'} in stock`, `#/parts/${p.id}`);
+    else if (after === 'ok' && (before === 'out' || before === 'order' || before === 'low')) this.notify('success', `Restocked: ${p.name}`, `${p.qty} ${p.unit || 'ea'} in stock`, `#/parts/${p.id}`);
   }
 
   // ------------------------------------------------------------------ auth
@@ -890,6 +891,26 @@ export class Store extends DurableObject<Env> {
       this.log(u, 'delete', 'users', id, `Deleted account ${cur.name}`);
       this.broadcast({ t: 'users', users: this.users(false) });
       return json({ ok: true });
+    }
+
+    // show the guided tour to one person or a whole role: next sign-in, or right away if they're online
+    if (a === 'tour' && m === 'POST') {
+      const b = await this.body<{ userId?: string; role?: Role | 'all' }>(req);
+      const rows = b.userId ? this.sql.exec(`SELECT id, name, prefs FROM users WHERE id=?`, b.userId).toArray()
+        : b.role === 'all' ? this.sql.exec(`SELECT id, name, prefs FROM users WHERE active=1`).toArray()
+          : ROLES.includes(b.role as Role) ? this.sql.exec(`SELECT id, name, prefs FROM users WHERE role=? AND active=1`, b.role as string).toArray() : [];
+      if (!rows.length) throw new HttpError(400, 'Nobody matches that choice.');
+      let online = 0;
+      for (const r of rows) {
+        const prefs = { ...JSON.parse((r.prefs as string) || '{}'), tutorialDone: false };
+        this.sql.exec(`UPDATE users SET prefs=? WHERE id=?`, JSON.stringify(prefs), r.id as string);
+        const socks = this.ctx.getWebSockets(r.id as string);
+        if (socks.length) online++;
+        for (const ws of socks) { try { ws.send(JSON.stringify({ t: 'tour' })); } catch { /* closing */ } }
+      }
+      const who = b.userId ? String(rows[0].name) : b.role === 'all' ? 'everyone' : `all ${b.role}s`;
+      this.log(u, 'update', 'users', b.userId || null, `Turned on the guided tour for ${who}`);
+      return json({ count: rows.length, online });
     }
 
     if (a === 'system' && m === 'GET') {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Printer, Save, Trash2, ClipboardList, ShoppingCart, ArrowLeft, PackageCheck, Copy, ExternalLink, FileDown, Link2 } from 'lucide-react';
-import { DEFAULT_PRINT_TEMPLATE, type OrderGuide, type OrderItem, type OrderStatus, type PrintTemplate, type Settings, type Part } from '../../../shared/types';
+import { needsReorder, DEFAULT_PRINT_TEMPLATE, type OrderGuide, type OrderItem, type OrderStatus, type PrintTemplate, type Settings, type Part } from '../../../shared/types';
 import { api } from '../lib/api';
 import { applyUpsert, deleteDoc, getState, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { fmtDate, money, navigate, stockStatus, todayISO, matches, reorderQty, timeAgo, setQuery } from '../lib/util';
@@ -37,7 +37,7 @@ function OrderList({ query }: { query: URLSearchParams }) {
         <div className="btn-group">
           <a className="btn" href="#/print/order/blank"><Printer size={19} />Blank form</a>
           {canEdit && <a className="btn" href="#/orders/new?from=low"><ShoppingCart size={19} />From low stock</a>}
-          {canEdit && <a className="btn primary lg" href="#/orders/new"><Plus />New order guide</a>}
+          {canEdit && <a className="btn primary lg" data-tour="new-order" href="#/orders/new"><Plus />New order guide</a>}
         </div>
       </div>
       <div className="row wrap" style={{ marginBottom: '1rem' }}>
@@ -62,7 +62,13 @@ function OrderList({ query }: { query: URLSearchParams }) {
                   <td><span className={`pill ${ORDER_STATUS[o.status]?.cls}`}>{ORDER_STATUS[o.status]?.label}</span></td>
                   <td className="num">{o.items.length}</td>
                   <td className="num">{orderTotal(o) ? money(orderTotal(o)) : '—'}</td>
-                  <td onClick={(e) => e.stopPropagation()}><a className="btn sm" href={`#/print/order/${o.id}`}><Printer size={16} />Print</a></td>
+                  <td onClick={(e) => e.stopPropagation()}><div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                    <a className="btn sm" href={`#/print/order/${o.id}`}><Printer size={16} />Print</a>
+                    {canEdit && <button className="btn sm icon ghost" aria-label="Delete order guide" title="Delete permanently" onClick={async () => {
+                      if (!(await confirmDialog({ title: `Permanently delete ${o.number}?`, body: `“${o.title}” with ${o.items.length} line${o.items.length === 1 ? '' : 's'} will be removed for good.`, confirm: 'Delete permanently', danger: true }))) return;
+                      try { await deleteDoc('orders', o.id); toast('Order guide deleted'); } catch (err) { toastError(err); }
+                    }}><Trash2 size={17} /></button>}
+                  </div></td>
                 </tr>
               ))}
             </tbody>
@@ -79,7 +85,7 @@ function itemFromPart(p: Part): OrderItem {
   const st = stockStatus(p);
   return {
     partId: p.id, name: p.name, partNumber: p.vendorPartNumber || p.partNumber, manufacturer: p.manufacturer, vendor: p.vendor, qty: reorderQty(p),
-    unit: p.unit, unitCost: p.unitCost, url: p.orderUrl, reason: st === 'out' ? `Out of stock (${p.qty} left)` : st === 'low' ? `Running low (${p.qty} left)` : '',
+    unit: p.unit, unitCost: p.unitCost, url: p.orderUrl, reason: st === 'out' ? `Out of stock (${p.qty} left)` : st === 'order' ? `Order now (${p.qty} left)` : st === 'low' ? `Running low (${p.qty} left)` : '',
   };
 }
 
@@ -103,7 +109,7 @@ function OrderEditor({ id, query }: { id: string; query: URLSearchParams }) {
     if (isNew) {
       let items: OrderItem[] = [blankItem()];
       if (query.get('from') === 'low') {
-        const need = Object.values(getState().docs.parts).filter((p) => ['low', 'out'].includes(stockStatus(p)))
+        const need = Object.values(getState().docs.parts).filter((p) => needsReorder(stockStatus(p)))
           .sort((a, b) => (a.vendor || '').localeCompare(b.vendor || '') || a.name.localeCompare(b.name));
         if (need.length) items = need.map(itemFromPart);
       }
@@ -146,7 +152,7 @@ function OrderEditor({ id, query }: { id: string; query: URLSearchParams }) {
     try { const o = await api<OrderGuide>(`/orders/${d.id}/receive`, { body: {} }); applyUpsert('orders', o); setD(o); toast('Received into stock'); } catch (e) { toastError(e); }
   };
   const remove = async () => {
-    if (!(await confirmDialog({ title: 'Delete this order guide?', confirm: 'Delete', danger: true }))) return;
+    if (!(await confirmDialog({ title: `Permanently delete ${d.number || 'this order guide'}?`, body: 'It will be removed for good.', confirm: 'Delete permanently', danger: true }))) return;
     try { if (!isNew) await deleteDoc('orders', d.id); navigate('/orders'); } catch (e) { toastError(e); }
   };
   const duplicate = () => {

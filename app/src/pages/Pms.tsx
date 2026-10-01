@@ -50,7 +50,7 @@ export function PmsPage({ tab: t, query }: { tab?: string; query: URLSearchParam
           <h1>PMs</h1>
           <div className="sub">Machine preventive maintenance. Next PM is due {DEFAULT_WEEKLY_DAYS} days after the last PM of any type; a monthly PM is required once a month.</div>
         </div>
-        {canEdit && <button className="btn primary lg" onClick={() => setLog({})}><Plus />Log a PM</button>}
+        {canEdit ? <button className="btn primary lg" data-tour="log-pm" onClick={() => setLog({})}><Plus />Log a PM</button> : <span data-tour="log-pm" />}
       </div>
 
       <div className="tiles" style={{ marginBottom: '1rem' }}>

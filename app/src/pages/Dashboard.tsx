@@ -25,7 +25,7 @@ export function Dashboard() {
   const d = useMemo(() => {
     const list = Object.values(parts);
     const active = list.filter((p) => !p.decommissioned);
-    const out = active.filter((p) => stockStatus(p) === 'out').sort((a, b) => Number(!!b.critical) - Number(!!a.critical) || a.name.localeCompare(b.name));
+    const out = active.filter((p) => stockStatus(p) === 'out' || stockStatus(p) === 'order').sort((a, b) => Number(stockStatus(a) === 'order') - Number(stockStatus(b) === 'order') || Number(!!b.critical) - Number(!!a.critical) || a.name.localeCompare(b.name));
     const low = active.filter((p) => stockStatus(p) === 'low').sort((a, b) => Number(!!b.critical) - Number(!!a.critical) || a.qty - b.qty);
     const value = active.reduce((s, p) => s + partValue(p), 0);
     const openOrders = Object.values(orders).filter((o) => !['received', 'cancelled'].includes(o.status));
@@ -53,9 +53,9 @@ export function Dashboard() {
         )}
       </div>
 
-      <div className="tiles">
+      <div className="tiles" data-tour="tiles">
         <a className="tile info" href="#/parts"><span className="t-label"><Package size={18} />Active parts</span><span className="t-value">{d.active}</span><span className="t-sub">in the database</span></a>
-        <a className={`tile ${d.out.length ? 'danger' : 'ok'}`} href="#/parts?status=out"><span className="t-label"><XCircle size={18} />Out of stock</span><span className="t-value">{d.out.length}</span><span className="t-sub">{d.out.length ? 'need ordering now' : 'nothing out — nice'}</span></a>
+        <a className={`tile ${d.out.length ? 'danger' : 'ok'}`} href="#/parts?status=reorder"><span className="t-label"><XCircle size={18} />Out / order now</span><span className="t-value">{d.out.length}</span><span className="t-sub">{d.out.length ? 'need ordering now' : 'nothing out — nice'}</span></a>
         <a className={`tile ${d.low.length ? 'warn' : 'ok'}`} href="#/parts?status=low"><span className="t-label"><AlertTriangle size={18} />Running low</span><span className="t-value">{d.low.length}</span><span className="t-sub">at or below reorder point</span></a>
         <a className="tile" href="#/analytics"><span className="t-label"><DollarSign size={18} />Inventory value</span><span className="t-value" style={{ fontSize: '1.6rem' }}>{money(d.value, 0)}</span><span className="t-sub">parts on the shelf</span></a>
         <a className={`tile ${pmStates.some((x) => x.status === 'overdue') ? 'danger' : pmDue ? 'warn' : 'ok'}`} href="#/pms"><span className="t-label"><Wrench size={18} />PMs due</span><span className="t-value">{pmDue}</span><span className="t-sub">{pmStates.filter((x) => x.daysLeft != null && x.daysLeft > 0 && x.daysLeft <= 7).length} more this week</span></a>
@@ -77,7 +77,7 @@ export function Dashboard() {
                     <div className="ellipsis" style={{ fontWeight: 700 }}>{p.name}</div>
                     <div className="small muted ellipsis">{[p.partNumber, p.location].filter(Boolean).join(' · ')} · suggest order {reorderQty(p)}</div>
                   </div>
-                  <span className={`pill ${stockStatus(p)}`}>{stockStatus(p) === 'out' ? 'Out' : 'Low'} · {p.qty}</span>
+                  <span className={`pill ${stockStatus(p)}`}>{stockStatus(p) === 'out' ? 'Out' : stockStatus(p) === 'order' ? 'Order now' : 'Low'} · {p.qty}</span>
                   {canEdit && <button className="btn sm icon" title="Receive" onClick={(e) => { e.stopPropagation(); setReceive(p); }}><PackagePlus size={18} /></button>}
                 </div>
               ))}

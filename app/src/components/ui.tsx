@@ -1,6 +1,6 @@
 // Reusable UI building blocks.
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { X, Search, Inbox, AlertTriangle, CheckCircle2, XCircle, Archive, ArrowUpRight, Info } from 'lucide-react';
+import { X, Search, Inbox, ShoppingCart, AlertTriangle, CheckCircle2, XCircle, Archive, ArrowUpRight, Info } from 'lucide-react';
 import { useStore, dismissToast } from '../lib/store';
 import { STATUS_LABEL } from '../lib/util';
 import type { StockStatus } from '../../../shared/types';
@@ -177,7 +177,7 @@ export function TagInput({ values, onChange, options, placeholder }: { values: s
 }
 
 export function StatusPill({ status }: { status: StockStatus }) {
-  const Icon = status === 'ok' ? CheckCircle2 : status === 'low' ? AlertTriangle : status === 'out' ? XCircle : Archive;
+  const Icon = status === 'ok' ? CheckCircle2 : status === 'low' ? AlertTriangle : status === 'order' ? ShoppingCart : status === 'out' ? XCircle : Archive;
   return <span className={`pill ${status}`}><Icon size={15} />{STATUS_LABEL[status]}</span>;
 }
 

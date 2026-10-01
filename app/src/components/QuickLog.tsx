@@ -25,7 +25,7 @@ export function QuickLogBubble() {
   if (!canEdit) return null;
   return (
     <>
-      <button className="fab no-print" onClick={() => setOpen(true)} aria-label="Quick log: parts used or received" title="Quick log — parts used / received">
+      <button className="fab no-print" data-tour="quicklog" onClick={() => setOpen(true)} aria-label="Quick log: parts used or received" title="Quick log — parts used / received">
         <Zap size={26} />
         <span className="fab-label">Quick log</span>
       </button>

@@ -18,6 +18,7 @@ export interface UserPrefs {
   theme?: 'light' | 'dark' | 'system';
   textSize?: 'standard' | 'large' | 'xlarge';
   desktopAlerts?: boolean;
+  tutorialDone?: boolean; // first-login walkthrough finished or skipped
 }
 
 export interface BaseDoc {
@@ -36,6 +37,7 @@ export interface Part extends BaseDoc {
   description?: string;
   qty: number;
   minQty?: number; // at or below = LOW (orange)
+  orderQty?: number; // at or below = ORDER NOW (red); blank = half of minQty
   maxQty?: number; // target stock level when re-ordering
   unit?: string;
   unitCost?: number;
@@ -109,9 +111,9 @@ export interface Equipment extends BaseDoc {
   // Rollers
   construction?: 'segmented' | 'solid';
   rollerType?: 'nip' | 'draw' | 'idler' | 'other';
-  diameter?: number;
-  length?: number;
-  covering?: string;
+  diameter?: number; // outer diameter, inches
+  length?: number; // roller length, inches
+  covering?: string; // no longer used (all rollers are rubber)
 }
 
 export interface OrderItem {
@@ -231,7 +233,7 @@ export type FieldType = 'str' | 'text' | 'num' | 'bool' | 'strs' | 'json' | 'tim
 export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   parts: {
     name: 'str', partNumber: 'str', manufacturer: 'str', category: 'str', location: 'str', description: 'text',
-    qty: 'num', minQty: 'num', maxQty: 'num', unit: 'str', unitCost: 'num', vendor: 'str', vendorPartNumber: 'str',
+    qty: 'num', minQty: 'num', orderQty: 'num', maxQty: 'num', unit: 'str', unitCost: 'num', vendor: 'str', vendorPartNumber: 'str',
     leadTimeDays: 'num', orderUrl: 'str', imageId: 'str', decommissioned: 'bool', critical: 'bool', machines: 'strs', notes: 'text',
   },
   manufacturers: { name: 'str', website: 'str', urlTemplate: 'str', notes: 'text' },
@@ -256,15 +258,27 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   },
 };
 
-// Stock status used everywhere (colours: ok=green, low=orange, out=red)
-export type StockStatus = 'ok' | 'low' | 'out' | 'retired';
-export function stockStatus(p: Pick<Part, 'qty' | 'minQty' | 'decommissioned'>): StockStatus {
+// Stock status used everywhere: ok = green, low = orange ("running low"),
+// order = red ("order now"), out = red (none left), retired = grey (decommissioned).
+export type StockStatus = 'ok' | 'low' | 'order' | 'out' | 'retired';
+type StockFields = Pick<Part, 'qty' | 'minQty' | 'orderQty' | 'decommissioned'>;
+/** Stock level at or below which a part is "order now". Uses the part's own setting, else half the reorder point. */
+export function orderNowLevel(p: Pick<Part, 'minQty' | 'orderQty'>): number | null {
+  if (p.orderQty != null) return p.orderQty;
+  if (p.minQty != null && p.minQty >= 2) return Math.floor(p.minQty / 2);
+  return null;
+}
+export function stockStatus(p: StockFields): StockStatus {
   if (p.decommissioned) return 'retired';
   const q = Number(p.qty) || 0;
   if (q <= 0) return 'out';
+  const order = orderNowLevel(p);
+  if (order != null && q <= order) return 'order';
   if (p.minQty != null && q <= p.minQty) return 'low';
   return 'ok';
 }
+/** Low, order-now or out: belongs on a reorder list. */
+export function needsReorder(s: StockStatus) { return s === 'low' || s === 'order' || s === 'out'; }
 
 export const DEFAULT_PRINT_TEMPLATE: PrintTemplate = {
   title: 'Parts Order Request',

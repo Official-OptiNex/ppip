@@ -3,6 +3,7 @@ import { TrendingUp, PackageMinus, DollarSign, XCircle, Truck, Star } from 'luci
 import { api, errorMessage } from '../lib/api';
 import { useStore } from '../lib/store';
 import { money, num, partValue, stockStatus } from '../lib/util';
+import { needsReorder } from '../../../shared/types';
 import { BarChart, HBarList } from '../components/Charts';
 import { Seg, Spinner } from '../components/ui';
 
@@ -68,7 +69,7 @@ export function AnalyticsPage() {
       const leads = ps.map((p) => p.leadTimeDays ?? v?.leadTimeDays).filter((x): x is number => x != null);
       return {
         name, preferred: !!v?.preferred, parts: ps.length, value: ps.reduce((s, p) => s + partValue(p), 0),
-        needs: ps.filter((p) => ['low', 'out'].includes(stockStatus(p))).length,
+        needs: ps.filter((p) => needsReorder(stockStatus(p))).length,
         lead: leads.length ? leads.reduce((a, b) => a + b, 0) / leads.length : null, spend: spend.get(name) || 0, usedCost: used.get(name) || 0,
       };
     }).filter((s) => s.parts > 0 || s.spend > 0).sort((a, b) => b.spend - a.spend || b.parts - a.parts);

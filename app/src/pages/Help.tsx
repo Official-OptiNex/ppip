@@ -1,5 +1,6 @@
 import { DEFAULT_WEEKLY_DAYS } from '../../../shared/pm';
-import { Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck, Smartphone, Search, Flame, Printer, Wifi, Usb } from 'lucide-react';
+import { startTour } from '../components/Tour';
+import { ShoppingCart, GraduationCap, Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck, Smartphone, Search, Flame, Printer, Wifi, Usb } from 'lucide-react';
 
 export function HelpPage() {
   const Item = ({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) => (
@@ -7,13 +8,17 @@ export function HelpPage() {
   );
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
-      <div><h1>How to use Parts & PM</h1><p className="muted" style={{ marginTop: 6 }}>A quick guide. Everything saves automatically and shows up on everyone's screen right away.</p></div>
+      <div className="row wrap" style={{ justifyContent: 'space-between' }}>
+        <div><h1>How to use Parts & PM</h1><p className="muted" style={{ marginTop: 6 }}>A quick guide. Everything saves automatically and shows up on everyone's screen right away.</p></div>
+        <button className="btn primary lg" onClick={() => startTour()}><GraduationCap />Take the guided tour</button>
+      </div>
 
       <div className="card">
         <div className="card-head"><h3>What the colors mean</h3></div>
         <div className="list">
           <Item icon={<CheckCircle2 color="var(--ok)" />} title="Green — In stock">More than the “reorder at” number.</Item>
           <Item icon={<AlertTriangle color="var(--warn)" />} title="Orange — Running low">At or below the “reorder at” number. Time to order.</Item>
+          <Item icon={<ShoppingCart color="var(--danger)" />} title="Red — Order now">Almost gone (at or below the “order now” number, or half the reorder point if that's blank). Order today.</Item>
           <Item icon={<XCircle color="var(--danger)" />} title="Red — Out of stock">Zero left. Order now.</Item>
           <Item icon={<Archive />} title="Gray — Decommissioned">Not used anymore. Hidden from the list and alerts (tick the box on the part to do this).</Item>
         </div>
