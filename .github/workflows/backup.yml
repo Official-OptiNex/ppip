@@ -1,0 +1,47 @@
+# Nightly off-site backup: copies all data (and new part photos) from the live
+# site into the "backups" branch of this private repo. Free, and kept forever in git history.
+# Needs repo secret BACKUP_KEY (same value as the Worker secret) and
+# repo variable PPIP_SERVER_URL (e.g. https://ppip.yourname.workers.dev).
+name: Nightly backup
+
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: code
+      - name: Check out backups branch (create if missing)
+        run: |
+          git clone --no-checkout "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" store
+          cd store
+          if git ls-remote --exit-code --heads origin backups >/dev/null; then
+            git checkout backups
+          else
+            git checkout --orphan backups && git rm -rf . >/dev/null 2>&1 || true
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download data
+        run: node code/scripts/offsite-backup.mjs store
+        env:
+          PPIP_SERVER_URL: ${{ vars.PPIP_SERVER_URL }}
+          BACKUP_KEY: ${{ secrets.BACKUP_KEY }}
+      - name: Commit
+        run: |
+          cd store
+          git config user.name "ppip-backup-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Backup $(date -u +%Y-%m-%d)"
+          git push origin backups

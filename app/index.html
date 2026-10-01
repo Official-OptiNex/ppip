@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-size="standard">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1f5fbf" />
+    <meta name="description" content="Parts inventory, stock alerts, order guides and hot knife / roller PM tracking." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Parts & PM</title>
+    <script>
+      // Apply saved theme/text size before first paint (no flash).
+      try {
+        var p = JSON.parse(localStorage.getItem('ppip.prefs') || '{}');
+        var d = p.theme === 'dark' || (p.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = d ? 'dark' : 'light';
+        document.documentElement.dataset.size = p.textSize || 'standard';
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,112 @@
+// Sample data so the app can be tried out before real parts are entered (Admin → System → Load demo data).
+import type { DocKind, Equipment, Machine, Part, Vendor } from '../shared/types';
+
+const DAY = 86_400_000;
+
+export function demoData() {
+  // deterministic pseudo random
+  let seed = 42;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
+  const now = Date.now();
+
+  const machines: Machine[] = ['Bag Machine 1', 'Bag Machine 2', 'Bag Machine 3', 'Bag Machine 4', 'Extruder A', 'Extruder B', 'Printer 1', 'Winder 2']
+    .map((name, i) => ({ id: `demo-m${i}`, name, area: i < 4 ? 'Converting' : i < 6 ? 'Extrusion' : 'Printing' }));
+
+  const vendors: Vendor[] = [
+    { id: 'demo-v1', name: 'McMaster-Carr', website: 'https://www.mcmaster.com', urlTemplate: 'https://www.mcmaster.com/{pn}', leadTimeDays: 1, preferred: true, phone: '(630) 833-0300' },
+    { id: 'demo-v2', name: 'Motion Industries', website: 'https://www.motion.com', urlTemplate: 'https://www.motion.com/search?q={pn}', leadTimeDays: 3, preferred: true, contactName: 'Local branch' },
+    { id: 'demo-v3', name: 'Grainger', website: 'https://www.grainger.com', urlTemplate: 'https://www.grainger.com/search?searchQuery={pn}', leadTimeDays: 2 },
+    { id: 'demo-v4', name: 'Knife & Heater Supply Co.', leadTimeDays: 10, notes: 'Custom hot knives - call for quote' },
+  ];
+
+  const raw: [string, string, string, string, string, number, number, number, string, string][] = [
+    // name, pn, manufacturer, category, location, qty, min, cost, vendor, unit
+    ['Cartridge heater 1/2" x 6" 500W 240V', '3618K451', 'McMaster-Carr', 'Heaters', 'Crib A', 6, 4, 38.5, 'McMaster-Carr', 'ea'],
+    ['Type J thermocouple 1/8" probe', '3871K23', 'McMaster-Carr', 'Sensors', 'Crib A', 3, 4, 27.9, 'McMaster-Carr', 'ea'],
+    ['PTFE coated fiberglass tape 2" x 36yd', '76475A31', 'McMaster-Carr', 'Tooling', 'Crib A', 0, 3, 64.2, 'McMaster-Carr', 'roll'],
+    ['Deep groove ball bearing 6204-2RS', '6204-2RSJEM', 'SKF', 'Bearings', 'Crib B', 14, 6, 11.4, 'Motion Industries', 'ea'],
+    ['Deep groove ball bearing 6205-2RS', '6205-2RSJEM', 'SKF', 'Bearings', 'Crib B', 5, 6, 12.8, 'Motion Industries', 'ea'],
+    ['Pillow block bearing 1-7/16"', 'P2B-SC-107', 'Timken', 'Bearings', 'Crib B', 2, 2, 58.0, 'Motion Industries', 'ea'],
+    ['Timing belt 450-L-100', '450L100', 'Gates', 'Belts', 'Crib B', 4, 2, 31.75, 'Motion Industries', 'ea'],
+    ['V-belt A42', 'A42', 'Gates', 'Belts', 'Crib B', 8, 3, 14.1, 'Motion Industries', 'ea'],
+    ['Photoelectric sensor, diffuse, M18', 'QS18VP6D', 'Banner Engineering', 'Sensors', 'Maint. Shop', 2, 2, 118.0, 'Grainger', 'ea'],
+    ['Registration eye / color mark sensor', 'QS18VN6LVQ8', 'Banner Engineering', 'Sensors', 'Maint. Shop', 1, 1, 289.0, 'Grainger', 'ea'],
+    ['Proximity sensor 12mm inductive', 'IFS204', 'IFM', 'Sensors', 'Maint. Shop', 7, 3, 64.0, 'Motion Industries', 'ea'],
+    ['Air cylinder 1-1/2" bore x 2" stroke', 'CQ2B40-50DZ', 'SMC', 'Pneumatics', 'Maint. Shop', 3, 2, 96.4, 'Motion Industries', 'ea'],
+    ['Solenoid valve 5/2 24VDC', 'SY5120-5DZ-01', 'SMC', 'Pneumatics', 'Maint. Shop', 1, 2, 84.3, 'Motion Industries', 'ea'],
+    ['Push-to-connect fitting 1/4" tube x 1/8" NPT', '5779K108', 'McMaster-Carr', 'Pneumatics', 'Crib A', 40, 20, 3.15, 'McMaster-Carr', 'ea'],
+    ['Polyurethane tubing 1/4" OD blue (100 ft)', '5648K24', 'McMaster-Carr', 'Pneumatics', 'Crib A', 2, 1, 42.0, 'McMaster-Carr', 'roll'],
+    ['Silicone sponge strip 1/2" x 1/8"', '8608K51', 'McMaster-Carr', 'Seals & O-Rings', 'Crib A', 12, 5, 9.6, 'McMaster-Carr', 'ft'],
+    ['O-ring kit Buna-N assorted', '9262K12', 'McMaster-Carr', 'Seals & O-Rings', 'Crib A', 1, 1, 39.5, 'McMaster-Carr', 'set'],
+    ['Solid state relay 40A', 'SSR-240D40', 'Omega', 'Electrical', 'Maint. Shop', 4, 2, 45.0, 'Grainger', 'ea'],
+    ['Temperature controller 1/16 DIN', 'EZ-ZONE PM6', 'Watlow', 'Electrical', 'Maint. Shop', 1, 1, 312.0, 'Grainger', 'ea'],
+    ['Fuse 10A fast acting (10 pk)', 'KTK-10', 'Eaton', 'Electrical', 'Maint. Shop', 3, 2, 27.5, 'Grainger', 'pk'],
+    ['Hot knife blade - thin tip', 'HK-THIN-12', 'Custom', 'Hot Knives', 'Line Side', 5, 4, 145.0, 'Knife & Heater Supply Co.', 'ea'],
+    ['Hot knife blade - wide tip', 'HK-WIDE-12', 'Custom', 'Hot Knives', 'Line Side', 2, 3, 165.0, 'Knife & Heater Supply Co.', 'ea'],
+    ['Seal bar Teflon cover', 'SB-TC-24', 'Custom', 'Tooling', 'Line Side', 9, 4, 18.0, 'Knife & Heater Supply Co.', 'ea'],
+    ['Socket head cap screw M6x20 (100)', '91290A316', 'McMaster-Carr', 'Fasteners', 'Crib A', 3, 1, 12.4, 'McMaster-Carr', 'box'],
+    ['Compression spring 0.6" OD', '9657K411', 'McMaster-Carr', 'Springs', 'Crib A', 18, 8, 1.95, 'McMaster-Carr', 'ea'],
+    ['Gear motor 1/2 HP 90VDC', '4Z130', 'Baldor (ABB)', 'Motors', 'Maint. Shop', 1, 1, 685.0, 'Grainger', 'ea'],
+    ['Anti-static brush 24"', 'ASB-24', 'Custom', 'Tooling', 'Line Side', 0, 2, 54.0, 'Grainger', 'ea'],
+  ];
+
+  const parts: Part[] = raw.map(([name, pn, manufacturer, category, location, qty, minQty, unitCost, vendor, unit], i) => {
+    const v = vendors.find((x) => x.name === vendor);
+    return {
+      id: `demo-p${i}`, name, partNumber: pn, manufacturer, category, location, qty, minQty, maxQty: minQty * 3, unit, unitCost, vendor,
+      leadTimeDays: v?.leadTimeDays, orderUrl: v?.urlTemplate ? v.urlTemplate.replace('{pn}', encodeURIComponent(pn)) : '',
+      machines: [pick(machines).name, ...(rnd() > 0.5 ? [pick(machines).name] : [])].filter((x, j, a) => a.indexOf(x) === j),
+      critical: i % 7 === 0,
+    };
+  });
+  parts.push({ id: 'demo-pold', name: 'Old style knife holder (Machine 5 - removed)', partNumber: 'KH-OLD-5', manufacturer: 'Custom', category: 'Tooling', location: 'Crib B', qty: 3, minQty: 0, unit: 'ea', decommissioned: true });
+
+  const equipment: Equipment[] = [];
+  const bagSizes: Equipment['bagSize'][] = ['small', 'medium', 'large', 'custom'];
+  for (let i = 0; i < 10; i++) {
+    const installed = i < 8;
+    equipment.push({
+      id: `demo-k${i}`, type: 'knife', tag: `HK-${String(101 + i)}`, status: installed ? 'installed' : 'spare',
+      machine: installed ? machines[i % 4].name : '', position: installed ? (i % 2 ? 'Rear' : 'Front') : '',
+      installedAt: installed ? now - Math.floor(rnd() * 45 + 2) * DAY : null, pmDays: 30,
+      tipType: i % 3 ? 'thin' : 'wide', bagSize: bagSizes[i % 4], bagInches: i % 4 === 3 ? 14.5 : undefined,
+    });
+  }
+  const rollerTypes: Equipment['rollerType'][] = ['nip', 'draw', 'nip', 'draw', 'idler'];
+  for (let i = 0; i < 10; i++) {
+    const installed = i < 8;
+    equipment.push({
+      id: `demo-r${i}`, type: 'roller', tag: `RL-${String(201 + i)}`, status: installed ? 'installed' : i === 8 ? 'repair' : 'spare',
+      machine: installed ? machines[i % 6].name : '', position: installed ? pick(['Infeed', 'Outfeed', 'Upper', 'Lower']) : '',
+      installedAt: installed ? now - Math.floor(rnd() * 240 + 5) * DAY : null, pmDays: 180,
+      construction: i % 2 ? 'segmented' : 'solid', rollerType: rollerTypes[i % 5], diameter: [3, 4, 4.5, 6][i % 4], length: [24, 36, 48][i % 3],
+      covering: pick(['Silicone 60A', 'EPDM 70A', 'Urethane 80A', 'Steel chrome']),
+    });
+  }
+
+  // ~10 months of usage history
+  const movements: { partId: string; partName: string; delta: number; qtyAfter: number; kind: string; machine: string; userName: string; unitCost: number; at: number }[] = [];
+  const people = ['Nick', 'Dave', 'Frank', 'Maria', 'Tom'];
+  for (const p of parts.filter((x) => !x.decommissioned)) {
+    const rate = rnd() * 0.25 + 0.02;
+    let q = p.qty + 20;
+    for (let d = 300; d > 0; d--) {
+      if (rnd() < rate) {
+        const take = Math.max(1, Math.round(rnd() * 2));
+        q = Math.max(0, q - take);
+        movements.push({ partId: p.id, partName: p.name, delta: -take, qtyAfter: q, kind: 'use', machine: pick(machines).name, userName: pick(people), unitCost: p.unitCost || 0, at: now - d * DAY + Math.floor(rnd() * 8 * 3600000) });
+      }
+      if (q <= (p.minQty || 1) && rnd() < 0.2) {
+        const add = (p.maxQty || 6) - q;
+        q += add;
+        movements.push({ partId: p.id, partName: p.name, delta: add, qtyAfter: q, kind: 'receive', machine: '', userName: pick(people), unitCost: p.unitCost || 0, at: now - d * DAY + 9 * 3600000 });
+      }
+    }
+  }
+
+  return {
+    docs: { machines, vendors, parts, equipment } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
+    movements,
+  };
+}

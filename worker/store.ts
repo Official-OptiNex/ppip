@@ -1,0 +1,982 @@
+// The whole database lives in this one Durable Object (SQLite storage, persistent, free tier).
+// Every change is broadcast to all connected screens over WebSockets so the app updates live.
+import { DurableObject } from 'cloudflare:workers';
+import {
+  DEFAULT_SETTINGS, DOC_KINDS, FIELD_SPECS, ROLES, SEED_MANUFACTURERS, stockStatus,
+  type DocKind, type Equipment, type Part, type PublicUser, type Role, type StockStatus, type UserPrefs,
+} from '../shared/types';
+import { demoData } from './demo';
+
+interface Env { BACKUP_KEY?: string }
+
+type Row = Record<string, SqlStorageValue>;
+interface AuthUser { id: string; name: string; email: string; role: Role }
+interface Ctx { user: AuthUser | null; tokenHash?: string; url: URL; req: Request }
+
+// Initial admin (password is stored only as a PBKDF2 hash).
+const SEED_ADMIN = {
+  name: 'Nick',
+  email: 'faciano.nicholas@gmail.com',
+  hash: 'pbkdf2$100000$0d5afc3e596a8e1416820b6f02424620$7726f10fdb111ef4d570e5ff2b8c2946f137e333ad70a1125d3c953cce996ed9',
+};
+
+const DAY = 86_400_000;
+const SESSION_TTL = 60 * DAY;
+const UPLOAD_TTL = 20 * 60_000;
+const MAX_BACKUPS_AUTO = 21;
+const CHUNK = 900_000; // bytes per stored chunk (DO SQLite values max out at 2 MB)
+const RANK: Record<Role, number> = { viewer: 0, editor: 1, admin: 2 };
+
+class HttpError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+const json = (data: unknown, status = 200, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers } });
+
+const uid = () => crypto.randomUUID();
+const hex = (buf: ArrayBuffer | Uint8Array) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+const unhex = (s: string) => new Uint8Array(s.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
+async function sha256(s: string) { return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))); }
+
+async function pbkdf2(password: string, salt: Uint8Array, iterations: number) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256));
+}
+async function hashPassword(password: string) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  return `pbkdf2$100000$${hex(salt)}$${await pbkdf2(password, salt, 100000)}`;
+}
+async function verifyPassword(password: string, stored: string) {
+  const [, iter, salt, hash] = stored.split('$');
+  if (!iter || !salt || !hash) return false;
+  const got = await pbkdf2(password, unhex(salt), Number(iter));
+  // constant-time compare
+  let diff = got.length ^ hash.length;
+  for (let i = 0; i < Math.min(got.length, hash.length); i++) diff |= got.charCodeAt(i) ^ hash.charCodeAt(i);
+  return diff === 0;
+}
+
+function randomCode(len: number) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(len));
+  return [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
+}
+
+// ---- value sanitising ----
+function clean(kind: DocKind, patch: Record<string, unknown>) {
+  const spec = FIELD_SPECS[kind];
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch || {})) {
+    const t = spec[k];
+    if (!t) continue;
+    if (v === null || v === undefined || v === '') { out[k] = t === 'bool' ? false : t === 'strs' ? [] : null; continue; }
+    switch (t) {
+      case 'str': out[k] = String(v).trim().slice(0, 500); break;
+      case 'text': out[k] = String(v).slice(0, 10_000); break;
+      case 'num': { const n = Number(v); out[k] = Number.isFinite(n) ? n : null; break; }
+      case 'time': { const n = Number(v); out[k] = Number.isFinite(n) && n > 0 ? n : null; break; }
+      case 'bool': out[k] = v === true || v === 'true' || v === 1 || v === '1' || v === 'yes'; break;
+      case 'strs': out[k] = (Array.isArray(v) ? v : String(v).split(/[,;]/)).map((s) => String(s).trim()).filter(Boolean).slice(0, 200); break;
+      case 'json': out[k] = JSON.parse(JSON.stringify(v)); break;
+    }
+  }
+  return out;
+}
+
+export class Store extends DurableObject<Env> {
+  sql: SqlStorage;
+  failedLogins = new Map<string, { count: number; until: number }>();
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    ctx.blockConcurrencyWhile(async () => { this.migrate(); });
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+
+  // ------------------------------------------------------------------ schema
+  migrate() {
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY, email TEXT, name TEXT, role TEXT, pw TEXT, active INTEGER DEFAULT 1,
+        prefs TEXT, created_at INTEGER, last_login INTEGER, notif_seen INTEGER DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY, user_id TEXT, created_at INTEGER, expires_at INTEGER, last_used INTEGER, agent TEXT);
+      CREATE TABLE IF NOT EXISTS docs (
+        kind TEXT, id TEXT, data TEXT, updated_at INTEGER, PRIMARY KEY (kind, id));
+      CREATE TABLE IF NOT EXISTS movements (
+        id TEXT PRIMARY KEY, part_id TEXT, part_name TEXT, delta REAL, qty_after REAL, kind TEXT,
+        machine TEXT, note TEXT, user_id TEXT, user_name TEXT, unit_cost REAL, at INTEGER);
+      CREATE INDEX IF NOT EXISTS mv_at ON movements(at);
+      CREATE INDEX IF NOT EXISTS mv_part ON movements(part_id, at);
+      CREATE TABLE IF NOT EXISTS activity (
+        id TEXT PRIMARY KEY, at INTEGER, user_name TEXT, action TEXT, kind TEXT, ref_id TEXT, summary TEXT);
+      CREATE INDEX IF NOT EXISTS act_at ON activity(at);
+      CREATE INDEX IF NOT EXISTS act_ref ON activity(ref_id, at);
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY, at INTEGER, level TEXT, title TEXT, body TEXT, link TEXT);
+      CREATE TABLE IF NOT EXISTS images (
+        id TEXT PRIMARY KEY, mime TEXT, full BLOB, thumb BLOB, size INTEGER, at INTEGER);
+      CREATE TABLE IF NOT EXISTS uploads (
+        code TEXT PRIMARY KEY, user_id TEXT, label TEXT, created_at INTEGER, expires_at INTEGER, image_id TEXT);
+      CREATE TABLE IF NOT EXISTS backups (
+        id TEXT PRIMARY KEY, at INTEGER, reason TEXT, size INTEGER, chunks INTEGER, counts TEXT);
+      CREATE TABLE IF NOT EXISTS backup_chunks (
+        backup_id TEXT, seq INTEGER, data BLOB, PRIMARY KEY (backup_id, seq));
+    `);
+    const seeded = this.sql.exec(`SELECT value FROM meta WHERE key='seeded'`).toArray()[0];
+    if (!seeded) {
+      const now = Date.now();
+      this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at) VALUES (?,?,?,?,?,1,'{}',?)`,
+        uid(), SEED_ADMIN.email, SEED_ADMIN.name, 'admin', SEED_ADMIN.hash, now);
+      this.putDoc('settings', { ...DEFAULT_SETTINGS, createdAt: now, updatedAt: now });
+      for (const m of SEED_MANUFACTURERS) this.putDoc('manufacturers', { id: uid(), ...m, createdAt: now, updatedAt: now });
+      this.sql.exec(`INSERT INTO meta (key,value) VALUES ('seeded','1'), ('orderSeq','0')`);
+    }
+  }
+
+  // ------------------------------------------------------------------ helpers
+  getDoc<T = Record<string, unknown>>(kind: string, id: string): T | null {
+    const r = this.sql.exec(`SELECT data FROM docs WHERE kind=? AND id=?`, kind, id).toArray()[0];
+    return r ? (JSON.parse(r.data as string) as T) : null;
+  }
+  putDoc(kind: string, doc: Record<string, unknown>) {
+    this.sql.exec(`INSERT OR REPLACE INTO docs (kind,id,data,updated_at) VALUES (?,?,?,?)`, kind, doc.id as string, JSON.stringify(doc), Number(doc.updatedAt) || Date.now());
+  }
+  allDocs<T = Record<string, unknown>>(kind: string): T[] {
+    return this.sql.exec(`SELECT data FROM docs WHERE kind=?`, kind).toArray().map((r) => JSON.parse(r.data as string) as T);
+  }
+  settings() { return { ...DEFAULT_SETTINGS, ...(this.getDoc('settings', 'app') || {}) }; }
+
+  publicUser(r: Row, full = false): PublicUser {
+    const u: PublicUser = { id: r.id as string, name: r.name as string, email: r.email as string, role: r.role as Role, active: !!r.active };
+    if (full) { u.lastLogin = (r.last_login as number) ?? null; u.createdAt = r.created_at as number; }
+    return u;
+  }
+  users(full = false) { return this.sql.exec(`SELECT * FROM users ORDER BY name COLLATE NOCASE`).toArray().map((r) => this.publicUser(r, full)); }
+
+  broadcast(msg: unknown, except?: WebSocket) {
+    const s = JSON.stringify(msg);
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === except) continue;
+      try { ws.send(s); } catch { /* socket closing */ }
+    }
+  }
+  presence(exclude?: WebSocket) {
+    const names = new Map<string, string>();
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === exclude) continue;
+      const a = ws.deserializeAttachment() as { uid: string; name: string } | null;
+      if (a) names.set(a.uid, a.name);
+    }
+    return [...names.entries()].map(([id, name]) => ({ id, name }));
+  }
+
+  log(user: AuthUser | null, action: string, kind: string | null, refId: string | null, summary: string) {
+    const row = { id: uid(), at: Date.now(), userName: user?.name ?? 'System', action, kind, refId, summary };
+    this.sql.exec(`INSERT INTO activity (id,at,user_name,action,kind,ref_id,summary) VALUES (?,?,?,?,?,?,?)`,
+      row.id, row.at, row.userName, action, kind, refId, summary);
+    this.broadcast({ t: 'activity', row });
+    return row;
+  }
+
+  notify(level: 'info' | 'warn' | 'danger' | 'success', title: string, body = '', link = '') {
+    const row = { id: uid(), at: Date.now(), level, title, body, link };
+    this.sql.exec(`INSERT INTO notifications (id,at,level,title,body,link) VALUES (?,?,?,?,?,?)`, row.id, row.at, level, title, body, link);
+    this.broadcast({ t: 'notification', row });
+  }
+
+  movement(user: AuthUser | null, p: Part, delta: number, kind: string, machine?: string | null, note?: string | null) {
+    const row = {
+      id: uid(), partId: p.id, partName: p.name, delta, qtyAfter: p.qty, kind, machine: machine || null, note: note || null,
+      userName: user?.name ?? 'System', unitCost: p.unitCost ?? null, at: Date.now(),
+    };
+    this.sql.exec(`INSERT INTO movements (id,part_id,part_name,delta,qty_after,kind,machine,note,user_id,user_name,unit_cost,at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      row.id, row.partId, row.partName, delta, row.qtyAfter, kind, row.machine, row.note, user?.id ?? null, row.userName, row.unitCost, row.at);
+    this.broadcast({ t: 'movement', row });
+  }
+
+  stockAlert(before: StockStatus | null, p: Part) {
+    const after = stockStatus(p);
+    if (after === before) return;
+    const where = p.location ? ` · ${p.location}` : '';
+    if (after === 'out') this.notify('danger', `OUT OF STOCK: ${p.name}`, `${p.partNumber ? `#${p.partNumber} · ` : ''}0 ${p.unit || 'ea'} left${where}`, `#/parts/${p.id}`);
+    else if (after === 'low') this.notify('warn', `Running low: ${p.name}`, `${p.qty} ${p.unit || 'ea'} left (reorder at ${p.minQty})${where}`, `#/parts/${p.id}`);
+    else if (after === 'ok' && (before === 'out' || before === 'low')) this.notify('success', `Restocked: ${p.name}`, `${p.qty} ${p.unit || 'ea'} in stock`, `#/parts/${p.id}`);
+  }
+
+  // ------------------------------------------------------------------ auth
+  async auth(req: Request, url: URL): Promise<Ctx> {
+    const h = req.headers.get('Authorization') || '';
+    const token = h.startsWith('Bearer ') ? h.slice(7) : url.searchParams.get('token') || '';
+    if (!token) return { user: null, url, req };
+    const tokenHash = await sha256(token);
+    const now = Date.now();
+    const r = this.sql.exec(
+      `SELECT s.last_used, u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>? AND u.active=1`, tokenHash, now,
+    ).toArray()[0];
+    if (!r) return { user: null, url, req };
+    if (now - (r.last_used as number) > 3_600_000) {
+      this.sql.exec(`UPDATE sessions SET last_used=?, expires_at=? WHERE token=?`, now, now + SESSION_TTL, tokenHash);
+    }
+    return { user: { id: r.id as string, name: r.name as string, email: r.email as string, role: r.role as Role }, tokenHash, url, req };
+  }
+  need(c: Ctx, role: Role): AuthUser {
+    if (!c.user) throw new HttpError(401, 'Please sign in.');
+    if (RANK[c.user.role] < RANK[role]) throw new HttpError(403, role === 'admin' ? 'Admins only.' : 'Your account is view-only.');
+    return c.user;
+  }
+
+  // ------------------------------------------------------------------ http
+  async fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    try {
+      return await this.route(req, url);
+    } catch (e) {
+      if (e instanceof HttpError) return json({ error: e.message }, e.status);
+      console.error(e);
+      return json({ error: 'Server error: ' + (e instanceof Error ? e.message : String(e)) }, 500);
+    }
+  }
+
+  async body<T = Record<string, unknown>>(req: Request): Promise<T> {
+    try { return (await req.json()) as T; } catch { throw new HttpError(400, 'Invalid request body.'); }
+  }
+
+  async route(req: Request, url: URL): Promise<Response> {
+    const p = url.pathname.replace(/^\/api/, '').replace(/\/+$/, '') || '/';
+    const m = req.method;
+    const seg = p.split('/').filter(Boolean).map(decodeURIComponent);
+
+    // ---- public endpoints
+    if (p === '/health') return json({ ok: true, time: Date.now() });
+    if (p === '/login' && m === 'POST') return this.login(req);
+    if (seg[0] === 'images' && seg[1] && m === 'GET') return this.getImage(seg[1], url.searchParams.has('thumb'));
+    if (seg[0] === 'm' && seg[1]) { // phone upload page endpoints (the random code is the credential)
+      if (m === 'GET') return this.uploadInfo(seg[1]);
+      if (m === 'POST') return this.uploadFromPhone(seg[1], req);
+    }
+    if (p === '/backup/export' && m === 'GET') return this.backupExport(req, false);
+    if (p === '/backup/images' && m === 'GET') return this.backupExport(req, true);
+
+    const c = await this.auth(req, url);
+    if (p === '/ws') return this.websocket(req, c);
+
+    // ---- session / me
+    if (p === '/logout' && m === 'POST') {
+      if (c.tokenHash) this.sql.exec(`DELETE FROM sessions WHERE token=?`, c.tokenHash);
+      return json({ ok: true });
+    }
+    if (p === '/bootstrap' && m === 'GET') return this.bootstrap(c);
+    if (p === '/me/prefs' && m === 'PATCH') {
+      const u = this.need(c, 'viewer');
+      const prefs = await this.body<UserPrefs>(req);
+      const cur = JSON.parse((this.sql.exec(`SELECT prefs FROM users WHERE id=?`, u.id).one().prefs as string) || '{}');
+      const next = { ...cur, ...prefs };
+      this.sql.exec(`UPDATE users SET prefs=? WHERE id=?`, JSON.stringify(next), u.id);
+      return json({ prefs: next });
+    }
+    if (p === '/me/password' && m === 'POST') {
+      const u = this.need(c, 'viewer');
+      const b = await this.body<{ current: string; next: string }>(req);
+      const row = this.sql.exec(`SELECT pw FROM users WHERE id=?`, u.id).one();
+      if (!(await verifyPassword(b.current || '', row.pw as string))) throw new HttpError(400, 'Current password is not correct.');
+      if (!b.next || b.next.length < 6) throw new HttpError(400, 'New password must be at least 6 characters.');
+      this.sql.exec(`UPDATE users SET pw=? WHERE id=?`, await hashPassword(b.next), u.id);
+      this.sql.exec(`DELETE FROM sessions WHERE user_id=? AND token<>?`, u.id, c.tokenHash!);
+      return json({ ok: true });
+    }
+    if (p === '/notifications/seen' && m === 'POST') {
+      const u = this.need(c, 'viewer');
+      this.sql.exec(`UPDATE users SET notif_seen=? WHERE id=?`, Date.now(), u.id);
+      return json({ ok: true });
+    }
+    if (p === '/notifications' && m === 'GET') {
+      this.need(c, 'viewer');
+      return json(this.sql.exec(`SELECT * FROM notifications ORDER BY at DESC LIMIT 200`).toArray());
+    }
+
+    // ---- documents
+    if (seg[0] === 'docs' && seg[1] && seg[2]) {
+      const kind = seg[1] as DocKind;
+      if (!DOC_KINDS.includes(kind)) throw new HttpError(404, 'Unknown collection.');
+      if (m === 'PUT') return json(await this.upsert(c, kind, seg[2], (await this.body<{ patch: Record<string, unknown> }>(req)).patch));
+      if (m === 'DELETE') return json(this.remove(c, kind, seg[2]));
+    }
+    if (seg[0] === 'parts' && seg[1] && seg[2] === 'adjust' && m === 'POST') return json(this.adjust(c, seg[1], await this.body(req)));
+    if (seg[0] === 'equipment' && seg[1] && seg[2] === 'action' && m === 'POST') return json(this.equipmentAction(c, seg[1], await this.body(req)));
+    if (seg[0] === 'orders' && seg[1] && seg[2] === 'receive' && m === 'POST') return json(this.receiveOrder(c, seg[1], await this.body(req)));
+    if (p === '/import' && m === 'POST') return json(this.importRows(c, await this.body(req)));
+
+    // ---- read-only queries
+    if (p === '/movements' && m === 'GET') return json(this.movements(c, url));
+    if (p === '/activity' && m === 'GET') return json(this.activity(c, url));
+    if (p === '/analytics' && m === 'GET') return json(this.analytics(c, url));
+    if (p === '/report' && m === 'GET') return json(this.report(c, url));
+    if (p === '/export' && m === 'GET') { this.need(c, 'viewer'); return json(await this.snapshot(false)); }
+
+    // ---- images
+    if (p === '/images' && m === 'POST') { const u = this.need(c, 'editor'); return json(await this.saveImage(req, u.id)); }
+    if (p === '/uploads' && m === 'POST') {
+      const u = this.need(c, 'editor');
+      const b = await this.body<{ label?: string }>(req);
+      const code = randomCode(8);
+      const now = Date.now();
+      this.sql.exec(`INSERT INTO uploads (code,user_id,label,created_at,expires_at) VALUES (?,?,?,?,?)`, code, u.id, (b.label || '').slice(0, 120), now, now + UPLOAD_TTL);
+      return json({ code, expiresAt: now + UPLOAD_TTL });
+    }
+
+    // ---- admin
+    if (seg[0] === 'admin') return this.admin(c, req, seg.slice(1));
+
+    throw new HttpError(404, 'Not found.');
+  }
+
+  // ------------------------------------------------------------------ login
+  async login(req: Request) {
+    const b = await this.body<{ login: string; password: string; device?: string }>(req);
+    const login = String(b.login || '').trim().toLowerCase();
+    if (!login || !b.password) throw new HttpError(400, 'Enter your email (or name) and password.');
+    const now = Date.now();
+    const f = this.failedLogins.get(login);
+    if (f && f.until > now) throw new HttpError(429, `Too many attempts. Try again in ${Math.ceil((f.until - now) / 60000)} min.`);
+    const r = this.sql.exec(`SELECT * FROM users WHERE (lower(email)=? OR lower(name)=?) AND active=1`, login, login).toArray()[0];
+    if (!r || !(await verifyPassword(b.password, r.pw as string))) {
+      const count = (f && f.until > now - 15 * 60000 ? f.count : 0) + 1;
+      this.failedLogins.set(login, { count, until: count >= 8 ? now + 15 * 60000 : 0 });
+      throw new HttpError(401, 'Wrong email/name or password.');
+    }
+    this.failedLogins.delete(login);
+    const token = hex(crypto.getRandomValues(new Uint8Array(32)));
+    this.sql.exec(`INSERT INTO sessions (token,user_id,created_at,expires_at,last_used,agent) VALUES (?,?,?,?,?,?)`,
+      await sha256(token), r.id as string, now, now + SESSION_TTL, now, String(b.device || req.headers.get('User-Agent') || '').slice(0, 200));
+    this.sql.exec(`UPDATE users SET last_login=? WHERE id=?`, now, r.id as string);
+    return json({ token, user: this.publicUser(r) });
+  }
+
+  bootstrap(c: Ctx) {
+    const u = this.need(c, 'viewer');
+    const row = this.sql.exec(`SELECT prefs, notif_seen FROM users WHERE id=?`, u.id).one();
+    const docs: Record<string, unknown[]> = {};
+    for (const k of DOC_KINDS) if (k !== 'settings') docs[k] = this.allDocs(k);
+    return json({
+      me: { ...u, prefs: JSON.parse((row.prefs as string) || '{}') },
+      notifSeen: row.notif_seen || 0,
+      users: this.users(u.role === 'admin'),
+      settings: this.settings(),
+      docs,
+      notifications: this.sql.exec(`SELECT * FROM notifications ORDER BY at DESC LIMIT 60`).toArray(),
+      activity: this.sql.exec(`SELECT id, at, user_name AS userName, action, kind, ref_id AS refId, summary FROM activity ORDER BY at DESC LIMIT 40`).toArray(),
+      online: this.presence(),
+      serverTime: Date.now(),
+    });
+  }
+
+  // ------------------------------------------------------------------ websockets
+  websocket(req: Request, c: Ctx) {
+    if (req.headers.get('Upgrade') !== 'websocket') throw new HttpError(426, 'Expected WebSocket.');
+    if (!c.user) return new Response('Unauthorized', { status: 401 });
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    this.ctx.acceptWebSocket(server, [c.user.id]);
+    server.serializeAttachment({ uid: c.user.id, name: c.user.name });
+    this.broadcast({ t: 'presence', online: this.presence() });
+    return new Response(null, { status: 101, webSocket: client });
+  }
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    if (message === 'hello') ws.send(JSON.stringify({ t: 'presence', online: this.presence() }));
+  }
+  async webSocketClose(ws: WebSocket, code: number) {
+    try { ws.close(code === 1005 || code === 1006 ? 1000 : code, 'bye'); } catch { /* already closed */ }
+    this.broadcast({ t: 'presence', online: this.presence(ws) }, ws);
+  }
+  async webSocketError(ws: WebSocket) { this.broadcast({ t: 'presence', online: this.presence(ws) }, ws); }
+
+  // ------------------------------------------------------------------ documents
+  async upsert(c: Ctx, kind: DocKind, id: string, patch: Record<string, unknown>) {
+    // editors may change the printed order-guide layout; everything else in settings is admin-only
+    const printOnly = kind === 'settings' && Object.keys(patch || {}).every((k) => k === 'printTemplate');
+    const u = this.need(c, kind === 'settings' && !printOnly ? 'admin' : 'editor');
+    if (kind === 'settings') id = 'app';
+    if (!/^[\w-]{1,64}$/.test(id)) throw new HttpError(400, 'Invalid id.');
+    return this.upsertDoc(u, kind, id, patch);
+  }
+
+  upsertDoc(u: AuthUser | null, kind: DocKind, id: string, patch: Record<string, unknown>, opts: { quiet?: boolean; note?: string } = {}) {
+    const now = Date.now();
+    const existing = this.getDoc<Record<string, unknown>>(kind, id);
+    const changes = clean(kind, patch);
+    const doc: Record<string, unknown> = { ...(existing || {}), ...changes, id, updatedAt: now, updatedBy: u?.name ?? 'System', createdAt: existing?.createdAt ?? now };
+
+    if (kind !== 'settings' && kind !== 'orders' && kind !== 'equipment' && !String(doc.name ?? '').trim()) throw new HttpError(400, 'Name is required.');
+    if (kind === 'equipment') {
+      if (!doc.tag) throw new HttpError(400, 'Tag / ID is required.');
+      if (!['knife', 'roller'].includes(doc.type as string)) throw new HttpError(400, 'Type must be knife or roller.');
+      if (!doc.status) doc.status = doc.machine ? 'installed' : 'spare';
+      if (doc.status === 'installed' && !doc.installedAt) doc.installedAt = now;
+    }
+    if (kind === 'orders') {
+      if (!Array.isArray(doc.items)) doc.items = [];
+      doc.items = (doc.items as Record<string, unknown>[]).slice(0, 300).map((it) => ({
+        ...it, name: String(it.name ?? '').slice(0, 300), qty: Number(it.qty) || 0,
+        unitCost: it.unitCost === '' || it.unitCost == null ? null : Number(it.unitCost) || 0,
+      }));
+      if (!doc.status) doc.status = 'draft';
+      if (!doc.title) doc.title = 'Parts order';
+      if (!doc.number) {
+        const seq = Number(this.sql.exec(`SELECT value FROM meta WHERE key='orderSeq'`).one().value) + 1;
+        this.sql.exec(`UPDATE meta SET value=? WHERE key='orderSeq'`, String(seq));
+        doc.number = `ORD-${String(seq).padStart(4, '0')}`;
+      }
+    }
+    if (kind === 'parts') {
+      doc.qty = Number(doc.qty) || 0;
+      if (!Array.isArray(doc.machines)) doc.machines = [];
+    }
+
+    this.putDoc(kind, doc);
+    this.broadcast({ t: 'upsert', kind, doc });
+
+    // side effects
+    if (kind === 'parts') {
+      const p = doc as unknown as Part;
+      const beforeQty = existing ? Number(existing.qty) || 0 : 0;
+      if (!existing && p.qty !== 0) this.movement(u, p, p.qty, 'create', null, 'Initial stock');
+      else if (existing && p.qty !== beforeQty) this.movement(u, p, p.qty - beforeQty, 'adjust', null, opts.note || 'Count corrected on edit');
+      if (!opts.quiet) this.stockAlert(existing ? stockStatus(existing as unknown as Part) : null, p);
+    }
+    if (existing && (kind === 'manufacturers' || kind === 'vendors' || kind === 'machines') && existing.name !== doc.name) {
+      this.cascadeRename(kind, existing.name as string, doc.name as string);
+    }
+    if (!opts.quiet && kind !== 'settings') {
+      const label = (doc.name || doc.tag || doc.title || id) as string;
+      const summary = existing ? `Updated ${singular(kind)} “${label}”` : `Added ${singular(kind)} “${label}”`;
+      this.log(u, existing ? 'update' : 'create', kind, id, summary + (kind === 'orders' ? ` (${doc.number})` : ''));
+    }
+    if (kind === 'settings' && !opts.quiet) this.log(u, 'update', 'settings', 'app', 'Updated app settings');
+    return doc;
+  }
+
+  cascadeRename(kind: 'manufacturers' | 'vendors' | 'machines', from: string, to: string) {
+    const now = Date.now();
+    for (const p of this.allDocs<Part>('parts')) {
+      let changed = false;
+      if (kind === 'manufacturers' && p.manufacturer === from) { p.manufacturer = to; changed = true; }
+      if (kind === 'vendors' && p.vendor === from) { p.vendor = to; changed = true; }
+      if (kind === 'machines' && p.machines?.includes(from)) { p.machines = p.machines.map((x) => (x === from ? to : x)); changed = true; }
+      if (changed) { p.updatedAt = now; this.putDoc('parts', p as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'parts', doc: p }); }
+    }
+    if (kind === 'machines') {
+      for (const e of this.allDocs<Equipment>('equipment')) {
+        if (e.machine === from) { e.machine = to; e.updatedAt = now; this.putDoc('equipment', e as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'equipment', doc: e }); }
+      }
+    }
+  }
+
+  remove(c: Ctx, kind: DocKind, id: string) {
+    const u = this.need(c, 'editor');
+    if (kind === 'settings') throw new HttpError(400, 'Settings cannot be deleted.');
+    const existing = this.getDoc<Record<string, unknown>>(kind, id);
+    if (!existing) return { ok: true };
+    this.sql.exec(`DELETE FROM docs WHERE kind=? AND id=?`, kind, id);
+    if (kind === 'parts' && existing.imageId) this.sql.exec(`DELETE FROM images WHERE id=?`, existing.imageId as string);
+    this.broadcast({ t: 'delete', kind, id });
+    this.log(u, 'delete', kind, id, `Deleted ${singular(kind)} “${existing.name || existing.tag || existing.title || id}”`);
+    return { ok: true };
+  }
+
+  adjust(c: Ctx, id: string, b: Record<string, unknown>) {
+    const u = this.need(c, 'editor');
+    const p = this.getDoc<Part>('parts', id);
+    if (!p) throw new HttpError(404, 'Part not found (it may have been deleted).');
+    const mode = String(b.mode || 'use');
+    const qty = Number(b.qty);
+    if (!Number.isFinite(qty) || (mode !== 'set' && qty <= 0) || qty < 0) throw new HttpError(400, 'Enter a valid quantity.');
+    const before = stockStatus(p);
+    const old = Number(p.qty) || 0;
+    const next = mode === 'use' ? old - qty : mode === 'receive' ? old + qty : qty;
+    if (next < 0) throw new HttpError(400, `Only ${old} ${p.unit || 'ea'} in stock.`);
+    p.qty = next;
+    p.updatedAt = Date.now();
+    p.updatedBy = u.name;
+    this.putDoc('parts', p as unknown as Record<string, unknown>);
+    this.broadcast({ t: 'upsert', kind: 'parts', doc: p });
+    const kind = mode === 'use' ? 'use' : mode === 'receive' ? 'receive' : 'adjust';
+    this.movement(u, p, next - old, kind, (b.machine as string) || null, (b.note as string) || null);
+    const verb = mode === 'use' ? `Took ${qty}` : mode === 'receive' ? `Received ${qty}` : `Counted ${qty} (was ${old})`;
+    this.log(u, kind, 'parts', id, `${verb} ${p.unit || 'ea'} · ${p.name}${b.machine ? ` → ${b.machine}` : ''}`);
+    this.stockAlert(before, p);
+    return p;
+  }
+
+  equipmentAction(c: Ctx, id: string, b: Record<string, unknown>) {
+    const u = this.need(c, 'editor');
+    const e = this.getDoc<Equipment>('equipment', id);
+    if (!e) throw new HttpError(404, 'Item not found.');
+    const at = Number(b.at) || Date.now();
+    const action = String(b.action);
+    const kindLabel = e.type === 'knife' ? 'Hot knife' : 'Roller';
+    const days = (t?: number | null) => (t ? Math.max(0, Math.round((at - t) / DAY)) : 0);
+    let summary = '';
+    switch (action) {
+      case 'install':
+        if (!b.machine) throw new HttpError(400, 'Choose a machine.');
+        e.status = 'installed'; e.machine = String(b.machine); e.position = String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
+        summary = `${kindLabel} ${e.tag} installed on ${e.machine}${e.position ? ` (${e.position})` : ''}`;
+        break;
+      case 'move': {
+        if (!b.machine) throw new HttpError(400, 'Choose a machine.');
+        const from = e.machine;
+        e.status = 'installed'; e.machine = String(b.machine); e.position = String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
+        summary = `${kindLabel} ${e.tag} moved ${from ? `from ${from} ` : ''}to ${e.machine}`;
+        break;
+      }
+      case 'remove': {
+        const from = e.machine; const d = days(e.installedAt);
+        e.status = b.to === 'repair' ? 'repair' : 'spare'; e.machine = ''; e.position = ''; e.installedAt = null; e.lastServiceAt = null;
+        summary = `${kindLabel} ${e.tag} removed from ${from || 'machine'} after ${d} day${d === 1 ? '' : 's'} → ${e.status === 'repair' ? 'repair / rebuild' : 'spares'}`;
+        break;
+      }
+      case 'service':
+        e.lastServiceAt = at;
+        summary = `${kindLabel} ${e.tag} serviced / checked${e.machine ? ` on ${e.machine}` : ''}`;
+        break;
+      case 'retire':
+        e.status = 'retired'; e.machine = ''; e.position = ''; e.installedAt = null;
+        summary = `${kindLabel} ${e.tag} retired / scrapped`;
+        break;
+      case 'spare':
+        e.status = 'spare';
+        summary = `${kindLabel} ${e.tag} back in spares`;
+        break;
+      default: throw new HttpError(400, 'Unknown action.');
+    }
+    if (b.note) summary += ` — ${String(b.note).slice(0, 500)}`;
+    e.updatedAt = Date.now(); e.updatedBy = u.name;
+    this.putDoc('equipment', e as unknown as Record<string, unknown>);
+    this.broadcast({ t: 'upsert', kind: 'equipment', doc: e });
+    this.log(u, action, 'equipment', id, summary);
+    return e;
+  }
+
+  receiveOrder(c: Ctx, id: string, b: Record<string, unknown>) {
+    const u = this.need(c, 'editor');
+    const o = this.getDoc<Record<string, unknown>>('orders', id);
+    if (!o) throw new HttpError(404, 'Order not found.');
+    const idx = new Set((b.items as number[] | undefined) ?? (o.items as unknown[]).map((_, i) => i));
+    let n = 0;
+    (o.items as Record<string, unknown>[]).forEach((it, i) => {
+      if (!idx.has(i) || it.received) return;
+      it.received = true;
+      if (it.partId) {
+        const p = this.getDoc<Part>('parts', it.partId as string);
+        if (p && Number(it.qty) > 0) { this.adjust(c, p.id, { mode: 'receive', qty: Number(it.qty), note: `Received on ${o.number}` }); n++; }
+      }
+    });
+    if ((o.items as Record<string, unknown>[]).every((it) => it.received)) o.status = 'received';
+    o.updatedAt = Date.now(); o.updatedBy = u.name;
+    this.putDoc('orders', o);
+    this.broadcast({ t: 'upsert', kind: 'orders', doc: o });
+    this.log(u, 'receive', 'orders', id, `Received ${o.number} into stock (${n} part${n === 1 ? '' : 's'} restocked)`);
+    return o;
+  }
+
+  importRows(c: Ctx, b: Record<string, unknown>) {
+    const u = this.need(c, 'editor');
+    const kind = String(b.kind || 'parts') as DocKind;
+    if (!DOC_KINDS.includes(kind) || kind === 'settings') throw new HttpError(400, 'Cannot import that collection.');
+    const rows = (b.rows as Record<string, unknown>[]) || [];
+    if (rows.length > 5000) throw new HttpError(400, 'Import at most 5000 rows at a time.');
+    const mode = b.mode === 'skip' ? 'skip' : 'update';
+    const existing = this.allDocs<Record<string, unknown>>(kind);
+    const key = (d: Record<string, unknown>) =>
+      kind === 'parts' && d.partNumber ? `pn:${String(d.partNumber).toLowerCase()}|${String(d.manufacturer || '').toLowerCase()}`
+        : kind === 'equipment' ? `tag:${String(d.tag || '').toLowerCase()}|${d.type}`
+          : `name:${String(d.name || d.title || '').toLowerCase()}`;
+    const byKey = new Map(existing.map((d) => [key(d), d]));
+    const byId = new Map(existing.map((d) => [d.id as string, d]));
+    let created = 0, updated = 0, skipped = 0;
+    const errors: string[] = [];
+    this.ctx.storage.transactionSync(() => {
+      rows.forEach((r, i) => {
+        try {
+          const match: Record<string, unknown> | undefined = (r.id ? byId.get(String(r.id)) : undefined) || byKey.get(key(r));
+          if (match && mode === 'skip') { skipped++; return; }
+          const id = (match?.id as string) || (typeof r.id === 'string' && /^[\w-]{1,64}$/.test(r.id) ? r.id : uid());
+          this.upsertDoc(u, kind, id, r, { quiet: true, note: 'Import' });
+          if (match) updated++; else created++;
+        } catch (e) { skipped++; if (errors.length < 20) errors.push(`Row ${i + 2}: ${(e as Error).message}`); }
+      });
+    });
+    this.log(u, 'import', kind, null, `Imported ${kind}: ${created} added, ${updated} updated, ${skipped} skipped`);
+    return { created, updated, skipped, errors };
+  }
+
+  // ------------------------------------------------------------------ queries
+  movements(c: Ctx, url: URL) {
+    this.need(c, 'viewer');
+    const q = url.searchParams;
+    const where: string[] = []; const args: SqlStorageValue[] = [];
+    if (q.get('partId')) { where.push('part_id=?'); args.push(q.get('partId')!); }
+    if (q.get('from')) { where.push('at>=?'); args.push(Number(q.get('from'))); }
+    if (q.get('to')) { where.push('at<?'); args.push(Number(q.get('to'))); }
+    if (q.get('before')) { where.push('at<?'); args.push(Number(q.get('before'))); }
+    const limit = Math.min(Number(q.get('limit')) || 200, 5000);
+    return this.sql.exec(
+      `SELECT id, part_id AS partId, part_name AS partName, delta, qty_after AS qtyAfter, kind, machine, note, user_name AS userName, unit_cost AS unitCost, at
+       FROM movements ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY at DESC LIMIT ${limit}`, ...args).toArray();
+  }
+
+  activity(c: Ctx, url: URL) {
+    this.need(c, 'viewer');
+    const q = url.searchParams;
+    const where: string[] = []; const args: SqlStorageValue[] = [];
+    if (q.get('refId')) { where.push('ref_id=?'); args.push(q.get('refId')!); }
+    if (q.get('kind')) { where.push('kind=?'); args.push(q.get('kind')!); }
+    if (q.get('before')) { where.push('at<?'); args.push(Number(q.get('before'))); }
+    if (q.get('q')) { where.push('(summary LIKE ? OR user_name LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
+    const limit = Math.min(Number(q.get('limit')) || 100, 1000);
+    return this.sql.exec(
+      `SELECT id, at, user_name AS userName, action, kind, ref_id AS refId, summary FROM activity
+       ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY at DESC LIMIT ${limit}`, ...args).toArray();
+  }
+
+  analytics(c: Ctx, url: URL) {
+    this.need(c, 'viewer');
+    const from = Number(url.searchParams.get('from')) || Date.now() - 365 * DAY;
+    const to = Number(url.searchParams.get('to')) || Date.now() + DAY;
+    const tz = Number(url.searchParams.get('tz')) || 0; // minutes, like Date#getTimezoneOffset
+    const shift = `(at/1000 - ${Math.round(tz) * 60})`;
+    const monthly = this.sql.exec(`
+      SELECT strftime('%Y-%m', ${shift}, 'unixepoch') AS month,
+        SUM(CASE WHEN kind='use' THEN -delta ELSE 0 END) AS used,
+        SUM(CASE WHEN kind='receive' THEN delta ELSE 0 END) AS received,
+        SUM(CASE WHEN kind='use' THEN -delta * COALESCE(unit_cost,0) ELSE 0 END) AS usedCost,
+        SUM(CASE WHEN kind='receive' THEN delta * COALESCE(unit_cost,0) ELSE 0 END) AS receivedCost,
+        COUNT(*) AS events
+      FROM movements WHERE at>=? AND at<? GROUP BY month ORDER BY month`, from, to).toArray();
+    const topUsed = this.sql.exec(`
+      SELECT part_id AS partId, MAX(part_name) AS partName, SUM(-delta) AS used, COUNT(*) AS times, SUM(-delta*COALESCE(unit_cost,0)) AS cost
+      FROM movements WHERE kind='use' AND at>=? AND at<? GROUP BY part_id ORDER BY used DESC LIMIT 15`, from, to).toArray();
+    const outEvents = this.sql.exec(`
+      SELECT part_id AS partId, MAX(part_name) AS partName, COUNT(*) AS times, MAX(at) AS lastAt
+      FROM movements WHERE qty_after<=0 AND delta<0 AND at>=? AND at<? GROUP BY part_id ORDER BY times DESC, lastAt DESC LIMIT 15`, from, to).toArray();
+    const byMachine = this.sql.exec(`
+      SELECT COALESCE(NULLIF(machine,''),'(not specified)') AS machine, SUM(-delta) AS used, SUM(-delta*COALESCE(unit_cost,0)) AS cost, COUNT(*) AS times
+      FROM movements WHERE kind='use' AND at>=? AND at<? GROUP BY 1 ORDER BY used DESC LIMIT 15`, from, to).toArray();
+    const byUser = this.sql.exec(`
+      SELECT COALESCE(user_name,'?') AS userName, COUNT(*) AS times FROM movements WHERE at>=? AND at<? GROUP BY 1 ORDER BY times DESC LIMIT 10`, from, to).toArray();
+    const receivedByPart = this.sql.exec(`
+      SELECT part_id AS partId, SUM(delta) AS qty, SUM(delta*COALESCE(unit_cost,0)) AS cost
+      FROM movements WHERE kind='receive' AND at>=? AND at<? GROUP BY part_id`, from, to).toArray();
+    const usedByPart = this.sql.exec(`
+      SELECT part_id AS partId, SUM(-delta) AS qty, SUM(-delta*COALESCE(unit_cost,0)) AS cost
+      FROM movements WHERE kind='use' AND at>=? AND at<? GROUP BY part_id`, from, to).toArray();
+    return { from, to, monthly, topUsed, outEvents, byMachine, byUser, receivedByPart, usedByPart };
+  }
+
+  report(c: Ctx, url: URL) {
+    this.need(c, 'viewer');
+    const from = Number(url.searchParams.get('from'));
+    const to = Number(url.searchParams.get('to'));
+    if (!from || !to) throw new HttpError(400, 'from/to required');
+    const agg = (kind: string, sign: number) => this.sql.exec(`
+      SELECT part_id AS partId, MAX(part_name) AS partName, SUM(${sign}*delta) AS qty, COUNT(*) AS times,
+        SUM(${sign}*delta*COALESCE(unit_cost,0)) AS cost, GROUP_CONCAT(DISTINCT NULLIF(machine,'')) AS machines
+      FROM movements WHERE kind=? AND at>=? AND at<? GROUP BY part_id ORDER BY qty DESC`, kind, from, to).toArray();
+    return {
+      from, to,
+      used: agg('use', -1),
+      received: agg('receive', 1),
+      adjustments: this.sql.exec(`SELECT id, part_id AS partId, part_name AS partName, delta, qty_after AS qtyAfter, note, user_name AS userName, at FROM movements WHERE kind IN ('adjust','create') AND at>=? AND at<? ORDER BY at DESC LIMIT 300`, from, to).toArray(),
+      equipment: this.sql.exec(`SELECT id, at, user_name AS userName, action, summary FROM activity WHERE kind='equipment' AND at>=? AND at<? ORDER BY at DESC LIMIT 300`, from, to).toArray(),
+      orders: this.sql.exec(`SELECT id, at, user_name AS userName, action, summary FROM activity WHERE kind='orders' AND at>=? AND at<? ORDER BY at DESC LIMIT 200`, from, to).toArray(),
+      totals: this.sql.exec(`SELECT COUNT(*) AS events, COUNT(DISTINCT user_name) AS people FROM movements WHERE at>=? AND at<?`, from, to).one(),
+    };
+  }
+
+  // ------------------------------------------------------------------ images
+  async saveImage(req: Request, userId: string) {
+    const form = await req.formData();
+    const full = form.get('full') as unknown as File | null;
+    const thumb = form.get('thumb') as unknown as File | null;
+    if (!full || typeof full === 'string') throw new HttpError(400, 'No image received.');
+    if (full.size > 1_900_000) throw new HttpError(413, 'Image too large (max ~1.9 MB after compression).');
+    if (thumb && typeof thumb !== 'string' && thumb.size > 300_000) throw new HttpError(413, 'Thumbnail too large.');
+    const id = uid().replace(/-/g, '') + hex(crypto.getRandomValues(new Uint8Array(4)));
+    const fullBuf = await full.arrayBuffer();
+    const thumbBuf = thumb && typeof thumb !== 'string' ? await thumb.arrayBuffer() : null;
+    this.sql.exec(`INSERT INTO images (id,mime,full,thumb,size,at) VALUES (?,?,?,?,?,?)`,
+      id, full.type || 'image/jpeg', fullBuf, thumbBuf, fullBuf.byteLength + (thumbBuf?.byteLength || 0), Date.now());
+    void userId;
+    return { id };
+  }
+  getImage(id: string, thumb: boolean) {
+    const r = this.sql.exec(`SELECT mime, full, thumb FROM images WHERE id=?`, id).toArray()[0];
+    if (!r) return new Response('Not found', { status: 404 });
+    const data = (thumb && r.thumb ? r.thumb : r.full) as ArrayBuffer;
+    return new Response(data, { headers: { 'Content-Type': (r.mime as string) || 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' } });
+  }
+  uploadInfo(code: string) {
+    const r = this.sql.exec(`SELECT * FROM uploads WHERE code=?`, code.toUpperCase()).toArray()[0];
+    if (!r || (r.expires_at as number) < Date.now()) throw new HttpError(404, 'This upload link has expired. Create a new one on the computer.');
+    return json({ label: r.label, expiresAt: r.expires_at, done: !!r.image_id });
+  }
+  async uploadFromPhone(code: string, req: Request) {
+    code = code.toUpperCase();
+    const r = this.sql.exec(`SELECT * FROM uploads WHERE code=?`, code).toArray()[0];
+    if (!r || (r.expires_at as number) < Date.now()) throw new HttpError(404, 'This upload link has expired. Create a new one on the computer.');
+    const { id } = await this.saveImage(req, r.user_id as string);
+    this.sql.exec(`UPDATE uploads SET image_id=? WHERE code=?`, id, code);
+    this.broadcast({ t: 'phoneUpload', code, imageId: id });
+    return json({ ok: true, id });
+  }
+
+  // ------------------------------------------------------------------ backups
+  async snapshot(includeSecrets: boolean) {
+    const docs: Record<string, unknown[]> = {};
+    for (const k of DOC_KINDS) docs[k] = this.allDocs(k);
+    return {
+      app: 'ppip', version: 1, exportedAt: Date.now(),
+      users: includeSecrets
+        ? this.sql.exec(`SELECT id,email,name,role,pw,active,prefs,created_at,last_login FROM users`).toArray()
+        : this.users(false),
+      docs,
+      movements: this.sql.exec(`SELECT * FROM movements ORDER BY at`).toArray(),
+      activity: this.sql.exec(`SELECT * FROM activity ORDER BY at`).toArray(),
+      notifications: this.sql.exec(`SELECT * FROM notifications ORDER BY at`).toArray(),
+      meta: this.sql.exec(`SELECT * FROM meta`).toArray(),
+    };
+  }
+
+  async createBackup(reason: string) {
+    const snap = await this.snapshot(true);
+    const text = JSON.stringify(snap);
+    const gz = new Uint8Array(await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+    const id = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomCode(4)}`;
+    const chunks = Math.ceil(gz.byteLength / CHUNK) || 1;
+    const counts = { parts: snap.docs.parts.length, movements: snap.movements.length, equipment: snap.docs.equipment.length, orders: snap.docs.orders.length };
+    this.ctx.storage.transactionSync(() => {
+      for (let i = 0; i < chunks; i++) this.sql.exec(`INSERT INTO backup_chunks (backup_id,seq,data) VALUES (?,?,?)`, id, i, gz.slice(i * CHUNK, (i + 1) * CHUNK).buffer);
+      this.sql.exec(`INSERT INTO backups (id,at,reason,size,chunks,counts) VALUES (?,?,?,?,?,?)`, id, Date.now(), reason, gz.byteLength, chunks, JSON.stringify(counts));
+    });
+    // prune old automatic backups
+    const old = this.sql.exec(`SELECT id FROM backups WHERE reason='auto' ORDER BY at DESC LIMIT -1 OFFSET ${MAX_BACKUPS_AUTO}`).toArray();
+    for (const o of old) this.deleteBackup(o.id as string);
+    return id;
+  }
+  deleteBackup(id: string) {
+    this.sql.exec(`DELETE FROM backup_chunks WHERE backup_id=?`, id);
+    this.sql.exec(`DELETE FROM backups WHERE id=?`, id);
+  }
+  async readBackup(id: string): Promise<string> {
+    const rows = this.sql.exec(`SELECT data FROM backup_chunks WHERE backup_id=? ORDER BY seq`, id).toArray();
+    if (!rows.length) throw new HttpError(404, 'Backup not found.');
+    const blob = new Blob(rows.map((r) => new Uint8Array(r.data as ArrayBuffer)));
+    return await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  }
+
+  restore(u: AuthUser, snap: Record<string, unknown>) {
+    if (snap.app !== 'ppip' || !snap.docs) throw new HttpError(400, 'That file is not a PPIP backup.');
+    const docs = snap.docs as Record<string, Record<string, unknown>[]>;
+    const users = (snap.users as Row[]) || [];
+    const hasSecrets = users.length > 0 && users.every((x) => typeof x.pw === 'string');
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(`DELETE FROM docs`);
+      for (const k of DOC_KINDS) for (const d of docs[k] || []) if (d && d.id) this.putDoc(k, d);
+      const ins = (table: string, rows: Row[] | undefined, cols: string[]) => {
+        this.sql.exec(`DELETE FROM ${table}`);
+        for (const r of rows || []) this.sql.exec(`INSERT OR REPLACE INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, ...cols.map((c) => (r[c] ?? null) as SqlStorageValue));
+      };
+      ins('movements', snap.movements as Row[], ['id', 'part_id', 'part_name', 'delta', 'qty_after', 'kind', 'machine', 'note', 'user_id', 'user_name', 'unit_cost', 'at']);
+      ins('activity', snap.activity as Row[], ['id', 'at', 'user_name', 'action', 'kind', 'ref_id', 'summary']);
+      ins('notifications', snap.notifications as Row[], ['id', 'at', 'level', 'title', 'body', 'link']);
+      for (const r of (snap.meta as Row[]) || []) this.sql.exec(`INSERT OR REPLACE INTO meta (key,value) VALUES (?,?)`, r.key, r.value);
+      if (hasSecrets) {
+        this.sql.exec(`DELETE FROM users`);
+        for (const r of users) this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at,last_login) VALUES (?,?,?,?,?,?,?,?,?)`,
+          r.id, r.email, r.name, r.role, r.pw, r.active ?? 1, r.prefs ?? '{}', r.created_at ?? Date.now(), r.last_login ?? null);
+        // never lock the restoring admin out
+        if (!this.sql.exec(`SELECT id FROM users WHERE id=? AND role='admin' AND active=1`, u.id).toArray().length) {
+          const me = this.sql.exec(`SELECT id FROM users WHERE lower(email)=lower(?)`, u.email).toArray()[0];
+          if (me) this.sql.exec(`UPDATE users SET role='admin', active=1 WHERE id=?`, me.id as string);
+        }
+      }
+    });
+    this.log(u, 'restore', null, null, 'Restored data from a backup');
+    this.broadcast({ t: 'reload' });
+  }
+
+  async backupExport(req: Request, images: boolean) {
+    const key = this.env.BACKUP_KEY;
+    if (!key || req.headers.get('X-Backup-Key') !== key) throw new HttpError(401, 'Backup key missing or wrong.');
+    if (images) return json(this.sql.exec(`SELECT id, size, at FROM images ORDER BY at`).toArray());
+    return json(await this.snapshot(true));
+  }
+
+  // ------------------------------------------------------------------ admin
+  async admin(c: Ctx, req: Request, seg: string[]): Promise<Response> {
+    const u = this.need(c, 'admin');
+    const m = req.method;
+    const [a, id, sub] = seg;
+
+    if (a === 'users' && !id && m === 'GET') return json(this.users(true));
+    if (a === 'users' && !id && m === 'POST') {
+      const b = await this.body<{ name: string; email: string; role: Role; password: string }>(req);
+      const name = String(b.name || '').trim(); const email = String(b.email || '').trim().toLowerCase();
+      if (!name || !email) throw new HttpError(400, 'Name and email are required.');
+      if (!ROLES.includes(b.role)) throw new HttpError(400, 'Choose a role.');
+      if (!b.password || b.password.length < 6) throw new HttpError(400, 'Password must be at least 6 characters.');
+      this.assertUnique(name, email);
+      const newId = uid();
+      this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at) VALUES (?,?,?,?,?,1,'{}',?)`, newId, email, name, b.role, await hashPassword(b.password), Date.now());
+      this.log(u, 'create', 'users', newId, `Created account for ${name} (${b.role})`);
+      this.broadcast({ t: 'users', users: this.users(false) });
+      return json(this.users(true).find((x) => x.id === newId));
+    }
+    if (a === 'users' && id && m === 'PATCH') {
+      const b = await this.body<{ name?: string; email?: string; role?: Role; password?: string; active?: boolean }>(req);
+      const cur = this.sql.exec(`SELECT * FROM users WHERE id=?`, id).toArray()[0];
+      if (!cur) throw new HttpError(404, 'User not found.');
+      const name = b.name != null ? String(b.name).trim() : (cur.name as string);
+      const email = b.email != null ? String(b.email).trim().toLowerCase() : (cur.email as string);
+      const role = b.role ?? (cur.role as Role);
+      const active = b.active ?? !!cur.active;
+      if (!ROLES.includes(role)) throw new HttpError(400, 'Invalid role.');
+      this.assertUnique(name, email, id);
+      if (cur.role === 'admin' && (role !== 'admin' || !active)) this.assertAnotherAdmin(id);
+      this.sql.exec(`UPDATE users SET name=?, email=?, role=?, active=? WHERE id=?`, name, email, role, active ? 1 : 0, id);
+      if (b.password) {
+        if (b.password.length < 6) throw new HttpError(400, 'Password must be at least 6 characters.');
+        this.sql.exec(`UPDATE users SET pw=? WHERE id=?`, await hashPassword(b.password), id);
+        if (id !== u.id) this.sql.exec(`DELETE FROM sessions WHERE user_id=?`, id);
+      }
+      if (!active) { this.sql.exec(`DELETE FROM sessions WHERE user_id=?`, id); this.kick(id); }
+      else if (role !== cur.role) this.kick(id, 4002); // make their screens reload with the new permissions
+      this.log(u, 'update', 'users', id, `Updated account ${name}${b.password ? ' (password reset)' : ''}`);
+      this.broadcast({ t: 'users', users: this.users(false) });
+      return json(this.users(true).find((x) => x.id === id));
+    }
+    if (a === 'users' && id && m === 'DELETE') {
+      if (id === u.id) throw new HttpError(400, 'You cannot delete your own account.');
+      const cur = this.sql.exec(`SELECT * FROM users WHERE id=?`, id).toArray()[0];
+      if (!cur) return json({ ok: true });
+      if (cur.role === 'admin') this.assertAnotherAdmin(id);
+      this.sql.exec(`DELETE FROM users WHERE id=?`, id);
+      this.sql.exec(`DELETE FROM sessions WHERE user_id=?`, id);
+      this.kick(id);
+      this.log(u, 'delete', 'users', id, `Deleted account ${cur.name}`);
+      this.broadcast({ t: 'users', users: this.users(false) });
+      return json({ ok: true });
+    }
+
+    if (a === 'system' && m === 'GET') {
+      const count = (t: string, where = '') => Number(this.sql.exec(`SELECT COUNT(*) AS n FROM ${t} ${where}`).one().n);
+      const img = this.sql.exec(`SELECT COUNT(*) AS n, COALESCE(SUM(size),0) AS bytes FROM images`).one();
+      const bk = this.sql.exec(`SELECT COALESCE(SUM(size),0) AS bytes FROM backups`).one();
+      const docsBytes = Number(this.sql.exec(`SELECT COALESCE(SUM(length(data)),0) AS b FROM docs`).one().b);
+      return json({
+        dbBytes: this.ctx.storage.sql.databaseSize,
+        imageBytes: Number(img.bytes), imageCount: Number(img.n), backupBytes: Number(bk.bytes), docsBytes,
+        counts: {
+          parts: count('docs', `WHERE kind='parts'`), equipment: count('docs', `WHERE kind='equipment'`), orders: count('docs', `WHERE kind='orders'`),
+          manufacturers: count('docs', `WHERE kind='manufacturers'`), vendors: count('docs', `WHERE kind='vendors'`), machines: count('docs', `WHERE kind='machines'`),
+          movements: count('movements'), activity: count('activity'), notifications: count('notifications'), users: count('users'), sessions: count('sessions'),
+        },
+        backups: this.sql.exec(`SELECT id, at, reason, size, counts FROM backups ORDER BY at DESC`).toArray(),
+        sessions: this.sql.exec(`SELECT substr(s.token,1,12) AS id, s.created_at AS createdAt, s.last_used AS lastUsed, s.expires_at AS expiresAt, s.agent, u.name AS userName
+          FROM sessions s LEFT JOIN users u ON u.id=s.user_id WHERE s.expires_at>? ORDER BY s.last_used DESC`, Date.now()).toArray(),
+        online: this.presence(),
+        connections: this.ctx.getWebSockets().length,
+        offsiteBackupConfigured: !!this.env.BACKUP_KEY,
+        limits: { storageBytes: 5 * 1024 ** 3, note: 'Cloudflare free plan: 5 GB SQLite Durable Object storage, 100,000 requests/day.' },
+      });
+    }
+    if (a === 'sessions' && id && m === 'DELETE') {
+      this.sql.exec(`DELETE FROM sessions WHERE substr(token,1,12)=?`, id);
+      return json({ ok: true });
+    }
+    if (a === 'backups' && !id && m === 'POST') { const bid = await this.createBackup('manual'); this.log(u, 'backup', null, null, 'Created a manual backup'); return json({ id: bid }); }
+    if (a === 'backups' && id && !sub && m === 'GET') {
+      return new Response(await this.readBackup(id), { headers: { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="ppip-backup-${id}.json"` } });
+    }
+    if (a === 'backups' && id && sub === 'restore' && m === 'POST') {
+      const text = await this.readBackup(id);
+      await this.createBackup('pre-restore');
+      this.restore(u, JSON.parse(text));
+      return json({ ok: true });
+    }
+    if (a === 'backups' && id && m === 'DELETE') { this.deleteBackup(id); return json({ ok: true }); }
+    if (a === 'restore' && m === 'POST') {
+      const snap = await this.body(req);
+      await this.createBackup('pre-restore');
+      this.restore(u, snap);
+      return json({ ok: true });
+    }
+    if (a === 'demo' && m === 'POST') {
+      if (this.allDocs('parts').length > 0) throw new HttpError(400, 'Demo data can only be loaded into an empty database.');
+      const d = demoData();
+      for (const k of Object.keys(d.docs) as DocKind[]) for (const doc of d.docs[k] || []) this.upsertDoc(u, k, doc.id as string, doc, { quiet: true });
+      for (const mv of d.movements) {
+        this.sql.exec(`INSERT INTO movements (id,part_id,part_name,delta,qty_after,kind,machine,note,user_id,user_name,unit_cost,at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          uid(), mv.partId, mv.partName, mv.delta, mv.qtyAfter, mv.kind, mv.machine, null, null, mv.userName, mv.unitCost, mv.at);
+      }
+      this.log(u, 'import', null, null, 'Loaded demo data');
+      this.broadcast({ t: 'reload' });
+      return json({ ok: true });
+    }
+    if (a === 'notifications' && m === 'DELETE') { this.sql.exec(`DELETE FROM notifications`); this.broadcast({ t: 'reload' }); return json({ ok: true }); }
+    throw new HttpError(404, 'Not found.');
+  }
+
+  assertUnique(name: string, email: string, exceptId = '') {
+    const dup = this.sql.exec(`SELECT name, email FROM users WHERE id<>? AND (lower(name)=lower(?) OR lower(email)=lower(?))`, exceptId, name, email).toArray()[0];
+    if (dup) throw new HttpError(400, (dup.email as string).toLowerCase() === email.toLowerCase() ? 'That email is already used.' : 'That name is already used (names are used to sign in, so they must be unique).');
+  }
+  assertAnotherAdmin(exceptId: string) {
+    const n = Number(this.sql.exec(`SELECT COUNT(*) AS n FROM users WHERE role='admin' AND active=1 AND id<>?`, exceptId).one().n);
+    if (n === 0) throw new HttpError(400, 'There must always be at least one active admin.');
+  }
+  kick(userId: string, code = 4001) {
+    for (const ws of this.ctx.getWebSockets(userId)) { try { ws.close(code, code === 4001 ? 'signed out' : 'role changed'); } catch { /* ignore */ } }
+  }
+
+  // ------------------------------------------------------------------ daily cron
+  async daily() {
+    const now = Date.now();
+    await this.createBackup('auto');
+    this.sql.exec(`DELETE FROM sessions WHERE expires_at<?`, now);
+    this.sql.exec(`DELETE FROM uploads WHERE expires_at<?`, now - DAY);
+    this.sql.exec(`DELETE FROM notifications WHERE at<?`, now - 120 * DAY);
+    // remove images nobody references any more (older than 2 days so in-progress edits are safe)
+    const used = new Set(this.allDocs<Part>('parts').map((p) => p.imageId).filter(Boolean));
+    for (const r of this.sql.exec(`SELECT id FROM images WHERE at<?`, now - 2 * DAY).toArray()) {
+      if (!used.has(r.id as string)) this.sql.exec(`DELETE FROM images WHERE id=?`, r.id as string);
+    }
+    // PM due check for hot knives and rollers
+    const s = this.settings();
+    const due = this.allDocs<Equipment>('equipment').filter((e) => {
+      if (e.status !== 'installed') return false;
+      const start = Math.max(e.installedAt || 0, e.lastServiceAt || 0);
+      const pm = e.pmDays || (e.type === 'knife' ? s.knifePmDays : s.rollerPmDays) || 0;
+      return start && pm && now - start >= pm * DAY;
+    });
+    if (due.length) {
+      const k = due.filter((e) => e.type === 'knife').length, r = due.length - k;
+      this.notify('warn', `PM due: ${[k && `${k} hot knife${k > 1 ? 'ves' : ''}`, r && `${r} roller${r > 1 ? 's' : ''}`].filter(Boolean).join(' and ')}`,
+        due.slice(0, 6).map((e) => `${e.tag}${e.machine ? ` @ ${e.machine}` : ''}`).join(', '), k ? '#/knives' : '#/rollers');
+    }
+    const parts = this.allDocs<Part>('parts');
+    const out = parts.filter((p) => stockStatus(p) === 'out').length;
+    const low = parts.filter((p) => stockStatus(p) === 'low').length;
+    if (new Date(now).getUTCDay() === (s.weeklyReportDay ?? 1)) {
+      this.notify('info', 'Weekly usage report is ready', `${out} out of stock · ${low} running low. Open Reports to view or print.`, '#/reports');
+    }
+  }
+}
+
+function singular(kind: string) {
+  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide' } as Record<string, string>)[kind] || kind;
+}
