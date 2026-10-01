@@ -7,13 +7,14 @@ import { useStore, logout, markNotificationsSeen, can } from '../lib/store';
 import { stockStatus, matches, avatarColor, initials, timeAgo, navigate, pmState } from '../lib/util';
 import { isFileMode } from '../lib/api';
 import { Thumb } from './ui';
+import { QuickLogBubble } from './QuickLog';
 import type { Part, Equipment, OrderGuide } from '../../../shared/types';
 
 const NAV: { to: string; label: string; icon: ReactNode; admin?: boolean; group?: string }[] = [
   { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={21} /> },
   { to: '/parts', label: 'Parts', icon: <Package size={21} /> },
   { to: '/orders', label: 'Order Guides', icon: <ClipboardList size={21} /> },
-  { to: '/knives', label: 'Hot Knives', icon: <Flame size={21} />, group: 'PM Tracking' },
+  { to: '/knives', label: 'Hot Knives', icon: <Flame size={21} />, group: 'Knives & Rollers' },
   { to: '/rollers', label: 'Rollers', icon: <CircleDot size={21} /> },
   { to: '/analytics', label: 'Analytics', icon: <BarChart3 size={21} />, group: 'Insights' },
   { to: '/reports', label: 'Weekly Report', icon: <FileText size={21} /> },
@@ -93,6 +94,7 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
         <main className="content" id="main">{children}</main>
       </div>
 
+      <QuickLogBubble />
       <nav className="bottom-nav no-print" aria-label="Quick navigation">
         <a href="#/" className={path === '/' ? 'active' : ''}><LayoutDashboard size={22} />Home</a>
         <a href="#/parts" className={isActive('/parts', path) ? 'active' : ''}><Package size={22} />Parts</a>
@@ -168,7 +170,7 @@ function Notifications() {
           <div className="list" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
             {attention.out > 0 && <a className="list-item" href="#/parts?status=out"><span className="li-icon danger"><XCircle size={19} /></span><div className="grow"><b>{attention.out} part{attention.out > 1 ? 's' : ''} out of stock</b><div className="small muted">Tap to see the list and reorder</div></div></a>}
             {attention.low > 0 && <a className="list-item" href="#/parts?status=low"><span className="li-icon warn"><AlertTriangle size={19} /></span><div className="grow"><b>{attention.low} part{attention.low > 1 ? 's' : ''} running low</b><div className="small muted">At or below the reorder point</div></div></a>}
-            {attention.due > 0 && <a className="list-item" href="#/knives?pm=due"><span className="li-icon warn"><Flame size={19} /></span><div className="grow"><b>{attention.due} knife/roller PM{attention.due > 1 ? 's' : ''} due</b><div className="small muted">Past their change / service interval</div></div></a>}
+            {attention.due > 0 && <a className="list-item" href="#/rollers?pm=due"><span className="li-icon warn"><CircleDot size={19} /></span><div className="grow"><b>{attention.due} roller PM{attention.due > 1 ? 's' : ''} due</b><div className="small muted">Past their change / service interval</div></div></a>}
             {notifications.length === 0 && !attention.out && !attention.low && <div className="empty small">No notifications yet.</div>}
             {notifications.slice(0, 40).map((n) => {
               const inner = <>

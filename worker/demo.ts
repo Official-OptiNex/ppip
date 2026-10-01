@@ -65,11 +65,11 @@ export function demoData() {
   const equipment: Equipment[] = [];
   const bagSizes: Equipment['bagSize'][] = ['small', 'medium', 'large', 'custom'];
   for (let i = 0; i < 10; i++) {
-    const installed = i < 8;
+    const installed = i < 4; // one knife spot per bag machine
     equipment.push({
       id: `demo-k${i}`, type: 'knife', tag: `HK-${String(101 + i)}`, status: installed ? 'installed' : 'spare',
-      machine: installed ? machines[i % 4].name : '', position: installed ? (i % 2 ? 'Rear' : 'Front') : '',
-      installedAt: installed ? now - Math.floor(rnd() * 45 + 2) * DAY : null, pmDays: 30,
+      machine: installed ? machines[i % 4].name : '',
+      installedAt: installed ? now - Math.floor(rnd() * 45 + 2) * DAY : null,
       tipType: i % 3 ? 'thin' : 'wide', bagSize: bagSizes[i % 4], bagInches: i % 4 === 3 ? 14.5 : undefined,
     });
   }

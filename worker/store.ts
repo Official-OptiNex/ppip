@@ -523,13 +523,13 @@ export class Store extends DurableObject<Env> {
     switch (action) {
       case 'install':
         if (!b.machine) throw new HttpError(400, 'Choose a machine.');
-        e.status = 'installed'; e.machine = String(b.machine); e.position = String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
+        e.status = 'installed'; e.machine = String(b.machine); e.position = e.type === 'knife' ? '' : String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
         summary = `${kindLabel} ${e.tag} installed on ${e.machine}${e.position ? ` (${e.position})` : ''}`;
         break;
       case 'move': {
         if (!b.machine) throw new HttpError(400, 'Choose a machine.');
         const from = e.machine;
-        e.status = 'installed'; e.machine = String(b.machine); e.position = String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
+        e.status = 'installed'; e.machine = String(b.machine); e.position = e.type === 'knife' ? '' : String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
         summary = `${kindLabel} ${e.tag} moved ${from ? `from ${from} ` : ''}to ${e.machine}`;
         break;
       }
@@ -958,9 +958,9 @@ export class Store extends DurableObject<Env> {
     // PM due check for hot knives and rollers
     const s = this.settings();
     const due = this.allDocs<Equipment>('equipment').filter((e) => {
-      if (e.status !== 'installed') return false;
+      if (e.type !== 'roller' || e.status !== 'installed') return false; // hot knives have no PM interval
       const start = Math.max(e.installedAt || 0, e.lastServiceAt || 0);
-      const pm = e.pmDays || (e.type === 'knife' ? s.knifePmDays : s.rollerPmDays) || 0;
+      const pm = e.pmDays || s.rollerPmDays || 0;
       return start && pm && now - start >= pm * DAY;
     });
     if (due.length) {

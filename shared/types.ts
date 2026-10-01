@@ -84,10 +84,10 @@ export interface Equipment extends BaseDoc {
   tag: string; // ID / serial written on the knife or roller
   status: EquipmentStatus;
   machine?: string;
-  position?: string;
+  position?: string; // rollers only (a hot knife has one spot per machine)
   installedAt?: number | null;
   lastServiceAt?: number | null;
-  pmDays?: number; // replace / service interval
+  pmDays?: number; // roller PM interval (hot knives have none)
   notes?: string;
   // Hot knives
   tipType?: 'thin' | 'wide';
@@ -159,7 +159,7 @@ export interface Settings extends BaseDoc {
   categories?: string[];
   locations?: string[];
   units?: string[];
-  knifePmDays?: number;
+  knifePmDays?: number; // no longer used (hot knives have no PM)
   rollerPmDays?: number;
   weeklyReportDay?: number; // 0=Sun..6=Sat
   currency?: string;

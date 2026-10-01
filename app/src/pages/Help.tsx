@@ -27,7 +27,7 @@ export function HelpPage() {
           <Item icon={<ClipboardCheck />} title="Counted the shelf">Open the part → <b>Count</b> and enter what's actually there.</Item>
           <Item icon={<Smartphone />} title="Add a photo with your phone">Edit a part → <b>Take photo with phone</b> → scan the QR code with your phone camera → take the picture → Send. It appears on the computer by itself.</Item>
           <Item icon={<Printer />} title="Order guide instead of paper">Order Guides → <b>New order guide</b>. Type the parts (it fills in part numbers from inventory), then <b>Print</b>. “From low stock” builds the list for you.</Item>
-          <Item icon={<Flame />} title="Hot knives & rollers">Install, move, remove or log a service. The page counts how many days each has been on its machine and turns orange/red when a change is due.</Item>
+          <Item icon={<Flame />} title="Hot knives & rollers">Install, move or remove them. The page counts how many days each one has been on its machine. Rollers also have a PM interval and turn orange/red when service is due.</Item>
         </div>
       </div>
 

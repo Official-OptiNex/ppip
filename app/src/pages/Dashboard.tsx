@@ -85,8 +85,8 @@ export function Dashboard() {
         </div>
 
         <div className="card">
-          <div className="card-head"><h3>Knife & roller PM</h3><a className="btn sm" href="#/knives">Open</a></div>
-          {d.due.length === 0 ? <Empty icon={<Flame size={40} />} title="Nothing due">All installed knives and rollers are within their PM interval.</Empty> : (
+          <div className="card-head"><h3>Roller PM</h3><a className="btn sm" href="#/rollers">Open</a></div>
+          {d.due.length === 0 ? <Empty icon={<CircleDot size={40} />} title="Nothing due">All installed rollers are within their PM interval.</Empty> : (
             <div className="list">
               {d.due.slice(0, 8).map(({ e, pm }) => (
                 <a key={e.id} className="list-item" href={`#/${e.type === 'knife' ? 'knives' : 'rollers'}?open=${e.id}`}>

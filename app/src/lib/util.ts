@@ -99,7 +99,8 @@ export function reorderQty(p: Part) {
   return Math.max(1, Math.ceil(target - (p.qty || 0)));
 }
 export function pmStart(e: Equipment) { return Math.max(e.installedAt || 0, e.lastServiceAt || 0) || null; }
-export function pmDays(e: Equipment, s: Settings) { return e.pmDays || (e.type === 'knife' ? s.knifePmDays : s.rollerPmDays) || 0; }
+/** Hot knives have no PM / change interval — only rollers do. */
+export function pmDays(e: Equipment, s: Settings) { return e.type === 'knife' ? 0 : e.pmDays || s.rollerPmDays || 0; }
 export type PmState = 'ok' | 'soon' | 'due' | 'na';
 export function pmState(e: Equipment, s: Settings): { state: PmState; days: number; interval: number; pct: number } {
   const interval = pmDays(e, s);
