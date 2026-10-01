@@ -3,7 +3,7 @@ import { useSyncExternalStore, useRef } from 'react';
 import {
   DEFAULT_SETTINGS, type Activity, type AppNotification, type DocKind, type DocMap, type Part, type PublicUser, type Settings, type UserPrefs,
 } from '../../../shared/types';
-import { api, ApiError, errorMessage, getToken, NetworkError, safeGet, safeSet, setToken, setUnauthorizedHandler, wsUrl } from './api';
+import { api, ApiError, errorMessage, getToken, NetworkError, safeGet, safeSet, setToken, setUnauthorizedHandler, setUndoableHandler, wsUrl } from './api';
 
 export type Docs = { [K in Exclude<DocKind, 'settings'>]: Record<string, DocMap[K]> };
 export type ConnState = 'live' | 'connecting' | 'offline';
@@ -27,13 +27,14 @@ export interface State {
   lastMovementAt: number;
   phoneUploads: Record<string, string>; // code -> imageId
   clockSkew: number;
+  undoBar: { id: string; summary: string; at: number } | null;
 }
 
 const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {}, pms: {}, mechanics: {} });
 
 let state: State = {
   phase: 'boot', me: null, users: [], settings: DEFAULT_SETTINGS, docs: emptyDocs(), notifications: [], notifSeen: 0, activity: [],
-  online: [], conn: 'connecting', outbox: loadOutbox(), toasts: [], lastMovementAt: 0, phoneUploads: {}, clockSkew: 0,
+  online: [], conn: 'connecting', outbox: loadOutbox(), toasts: [], lastMovementAt: 0, phoneUploads: {}, clockSkew: 0, undoBar: null,
 };
 const listeners = new Set<() => void>();
 export function getState() { return state; }
@@ -168,6 +169,7 @@ export function newId() { return crypto.randomUUID(); }
 
 // ------------------------------------------------------------ session lifecycle
 setUnauthorizedHandler(() => { if (state.phase === 'ready') logout(false); });
+setUndoableHandler((u) => setState({ undoBar: { ...u, at: Date.now() } }));
 
 export async function boot() {
   applyAppearance(null);

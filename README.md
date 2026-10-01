@@ -1,4 +1,4 @@
-# PPIP — Parts & PM
+# Process Engineer
 
 A private, live-updating web app for a maintenance / process engineering department:
 

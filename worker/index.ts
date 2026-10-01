@@ -16,6 +16,7 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Backup-Key',
   'Access-Control-Max-Age': '86400',
+  'Access-Control-Expose-Headers': 'X-Undo-Id, X-Undo-Summary',
 };
 
 function store(env: Env) {

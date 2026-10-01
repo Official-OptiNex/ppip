@@ -230,6 +230,9 @@ export interface Activity {
   kind?: string | null;
   refId?: string | null;
   summary: string;
+  undoId?: string | null; // set when this change can be undone
+  undone?: number | null;
+  undoUserId?: string | null;
 }
 
 export interface AppNotification {
@@ -300,7 +303,7 @@ export const DEFAULT_PRINT_TEMPLATE: PrintTemplate = {
   headerNote: '',
   footerNote: 'Please return completed form to the maintenance office.',
   showLogo: true,
-  logoText: 'PPIP',
+  logoText: '',
   accent: '#1f5fbf',
   columns: { partNumber: true, manufacturer: true, vendor: true, unitCost: true, total: true, reason: true, link: false },
   signatures: ['Requested by', 'Supervisor approval', 'Purchasing'],

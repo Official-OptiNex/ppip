@@ -32,7 +32,7 @@ export const getToken = () => safeGet(LS.token);
 export const setToken = (t: string | null) => safeSet(LS.token, t);
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public data?: unknown) { super(message); }
 }
 export class NetworkError extends Error {
   constructor() { super('No connection to the server.'); }
@@ -40,6 +40,9 @@ export class NetworkError extends Error {
 
 let onUnauthorized: () => void = () => {};
 export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn; }
+/** Called whenever the server says the change just made can be undone. */
+let onUndoable: (u: { id: string; summary: string }) => void = () => {};
+export function setUndoableHandler(fn: (u: { id: string; summary: string }) => void) { onUndoable = fn; }
 
 export async function api<T = unknown>(path: string, opts: { method?: string; body?: unknown; form?: FormData; auth?: boolean; timeout?: number } = {}): Promise<T> {
   const headers: Record<string, string> = {};
@@ -61,7 +64,9 @@ export async function api<T = unknown>(path: string, opts: { method?: string; bo
   if (res.status === 401 && opts.auth !== false && token) onUnauthorized();
   const type = res.headers.get('Content-Type') || '';
   const data = type.includes('application/json') ? await res.json().catch(() => null) : await res.text();
-  if (!res.ok) throw new ApiError(res.status, (data && (data as { error?: string }).error) || `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(res.status, (data && (data as { error?: string }).error) || `Request failed (${res.status})`, data);
+  const undoId = res.headers.get('X-Undo-Id');
+  if (undoId) onUndoable({ id: undoId, summary: decodeURIComponent(res.headers.get('X-Undo-Summary') || '') });
   return data as T;
 }
 

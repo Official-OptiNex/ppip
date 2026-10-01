@@ -141,7 +141,7 @@ function UserForm({ user, onClose, onSaved }: { user: Partial<PublicUser>; onClo
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
   if (done) {
-    const text = `Parts & PM login\nSite: ${serverUrl() || location.origin}\nName: ${done.name}\nEmail: ${done.email}\nPassword: ${done.password}`;
+    const text = `Process Engineer login\nSite: ${serverUrl() || location.origin}\nName: ${done.name}\nEmail: ${done.email}\nPassword: ${done.password}`;
     return (
       <Modal title={isNew ? 'Account created' : 'Password updated'} onClose={onClose} footer={<button className="btn primary lg" onClick={onClose}>Done</button>}>
         <div className="stack">
@@ -472,10 +472,9 @@ function PrintTab() {
         <Field label="Title"><input className="input" value={t.title} onChange={(e) => set('title', e.target.value)} /></Field>
         <Field label="Subtitle"><input className="input" value={t.subtitle || ''} onChange={(e) => set('subtitle', e.target.value)} /></Field>
         <div className="grid-2">
-          <Field label="Logo text"><input className="input" value={t.logoText || ''} onChange={(e) => set('logoText', e.target.value)} maxLength={10} /></Field>
           <Field label="Accent color"><input className="input" type="color" value={t.accent || '#1f5fbf'} onChange={(e) => set('accent', e.target.value)} style={{ padding: 4 }} /></Field>
         </div>
-        <label className="check"><input type="checkbox" checked={!!t.showLogo} onChange={(e) => set('showLogo', e.target.checked)} />Show logo box</label>
+        <label className="check"><input type="checkbox" checked={!!t.showLogo} onChange={(e) => set('showLogo', e.target.checked)} />Show the Process Engineer logo</label>
         <Field label="Note at the top (optional)"><textarea className="input" value={t.headerNote || ''} onChange={(e) => set('headerNote', e.target.value)} /></Field>
         <Field label="Footer note"><input className="input" value={t.footerNote || ''} onChange={(e) => set('footerNote', e.target.value)} /></Field>
         <Field label="Columns">

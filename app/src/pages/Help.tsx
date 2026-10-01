@@ -1,6 +1,6 @@
 import { DEFAULT_WEEKLY_DAYS } from '../../../shared/pm';
 import { startTour } from '../components/Tour';
-import { IdCard, Menu, ShoppingCart, GraduationCap, Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck, Smartphone, Search, Flame, Printer, Wifi, Usb } from 'lucide-react';
+import { Undo2, IdCard, Menu, ShoppingCart, GraduationCap, Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck, Smartphone, Search, Flame, Printer, Wifi, Usb } from 'lucide-react';
 
 export function HelpPage() {
   const Item = ({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) => (
@@ -9,7 +9,7 @@ export function HelpPage() {
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
       <div className="row wrap" style={{ justifyContent: 'space-between' }}>
-        <div><h1>How to use Parts & PM</h1><p className="muted" style={{ marginTop: 6 }}>A quick guide. Everything saves automatically and shows up on everyone's screen right away.</p></div>
+        <div><h1>How to use Process Engineer</h1><p className="muted" style={{ marginTop: 6 }}>A quick guide. Everything saves automatically and shows up on everyone's screen right away.</p></div>
         <button className="btn primary lg" onClick={() => startTour()}><GraduationCap />Take the guided tour</button>
       </div>
 
@@ -41,10 +41,11 @@ export function HelpPage() {
       <div className="card">
         <div className="card-head"><h3>Good to know</h3></div>
         <div className="list">
+          <Item icon={<Undo2 />} title="Made a mistake? Undo it">After every change a bar appears at the bottom with an <b>Undo</b> button (or press <span className="kbd-hint">Ctrl</span>+<span className="kbd-hint">Z</span>). For older changes, open <b>Activity Log</b> (under More tools) and click <b>Undo</b> next to it — for up to 30 days. Deleted parts come back with their photo.</Item>
           <Item icon={<IdCard />} title="Sign in with your badge">At the sign-in screen just scan your employee badge — no clicking. First time: sign in with your name and password, then click <b>Add my badge</b> (top of the screen) and scan it once.</Item>
           <Item icon={<Menu />} title="Can't find a page?">Less-used pages (reports, analytics, suppliers, labels, import/export) are under <b>More tools</b> in the menu.</Item>
           <Item icon={<Wifi />} title="Live updates">The green “Live” dot means you're connected. If the internet drops, keep working — changes are saved on your computer and sync when it's back.</Item>
-          <Item icon={<Usb />} title="Running from a USB stick">Open <b>Start PPIP</b> on the stick. It uses the same data as the website.</Item>
+          <Item icon={<Usb />} title="Running from a USB stick">Open <b>Start Process Engineer</b> on the stick. It uses the same data as the website.</Item>
           <Item icon={<Smartphone />} title="On your phone">Open the website and choose “Add to Home Screen” — it then works like an app.</Item>
           <Item icon={<CheckCircle2 />} title="Text too small or too big?">Click your name (bottom-left) → <b>Text size</b>.</Item>
         </div>
