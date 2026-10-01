@@ -127,6 +127,10 @@ export class Store extends DurableObject<Env> {
       CREATE TABLE IF NOT EXISTS backup_chunks (
         backup_id TEXT, seq INTEGER, data BLOB, PRIMARY KEY (backup_id, seq));
     `);
+    // v3: badge numbers for one-scan sign-in
+    const userCols = this.sql.exec(`PRAGMA table_info(users)`).toArray().map((r) => r.name);
+    if (!userCols.includes('badge')) this.sql.exec(`ALTER TABLE users ADD COLUMN badge TEXT`);
+    this.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_badge ON users(badge) WHERE badge IS NOT NULL`);
     const seeded = this.sql.exec(`SELECT value FROM meta WHERE key='seeded'`).toArray()[0];
     if (!seeded) {
       const now = Date.now();
@@ -163,7 +167,7 @@ export class Store extends DurableObject<Env> {
 
   publicUser(r: Row, full = false): PublicUser {
     const u: PublicUser = { id: r.id as string, name: r.name as string, email: r.email as string, role: r.role as Role, active: !!r.active };
-    if (full) { u.lastLogin = (r.last_login as number) ?? null; u.createdAt = r.created_at as number; }
+    if (full) { u.lastLogin = (r.last_login as number) ?? null; u.createdAt = r.created_at as number; u.badge = (r.badge as string) || null; }
     return u;
   }
   users(full = false) { return this.sql.exec(`SELECT * FROM users ORDER BY name COLLATE NOCASE`).toArray().map((r) => this.publicUser(r, full)); }
@@ -264,6 +268,7 @@ export class Store extends DurableObject<Env> {
 
     // ---- public endpoints
     if (p === '/health') return json({ ok: true, time: Date.now() });
+    if (p === '/login-info' && m === 'GET') { const s = this.settings(); return json({ badgeLogin: s.badgeLogin !== false, companyName: s.companyName || '' }); }
     if (p === '/login' && m === 'POST') return this.login(req);
     if (seg[0] === 'images' && seg[1] && m === 'GET') return this.getImage(seg[1], url.searchParams.has('thumb'));
     if (seg[0] === 'm' && seg[1]) { // phone upload page endpoints (the random code is the credential)
@@ -289,6 +294,14 @@ export class Store extends DurableObject<Env> {
       const next = { ...cur, ...prefs };
       this.sql.exec(`UPDATE users SET prefs=? WHERE id=?`, JSON.stringify(next), u.id);
       return json({ prefs: next });
+    }
+    if (p === '/me/badge' && m === 'PUT') {
+      const u = this.need(c, 'viewer');
+      const b = await this.body<{ badge?: string | null }>(req);
+      this.setBadge(u.id, b.badge);
+      const badge = this.sql.exec(`SELECT badge FROM users WHERE id=?`, u.id).one().badge as string | null;
+      this.log(u, 'update', 'users', u.id, badge ? `${u.name} linked a badge` : `${u.name} removed their badge`);
+      return json({ badge });
     }
     if (p === '/me/password' && m === 'POST') {
       const u = this.need(c, 'viewer');
@@ -348,7 +361,8 @@ export class Store extends DurableObject<Env> {
 
   // ------------------------------------------------------------------ login
   async login(req: Request) {
-    const b = await this.body<{ login: string; password: string; device?: string }>(req);
+    const b = await this.body<{ login?: string; password?: string; badge?: string; device?: string }>(req);
+    if (b.badge != null) return this.badgeLogin(req, String(b.badge), b.device);
     const login = String(b.login || '').trim().toLowerCase();
     if (!login || !b.password) throw new HttpError(400, 'Enter your email (or name) and password.');
     const now = Date.now();
@@ -368,13 +382,44 @@ export class Store extends DurableObject<Env> {
     return json({ token, user: this.publicUser(r) });
   }
 
+  /** One-scan sign-in with an employee badge (keyboard-wedge scanner or typed). */
+  async badgeLogin(req: Request, raw: string, device?: string) {
+    if (this.settings().badgeLogin === false) throw new HttpError(403, 'Badge sign-in is turned off. Use your name or email and password.');
+    const badge = normBadge(raw);
+    if (!badge) throw new HttpError(400, 'Badge numbers are 2 to 8 digits.');
+    const now = Date.now();
+    const key = '__badge__'; // shared limit so badge numbers can't be guessed by trying many
+    const f = this.failedLogins.get(key);
+    if (f && f.until > now) throw new HttpError(429, `Too many unknown badges. Try again in ${Math.ceil((f.until - now) / 60000)} min, or sign in with your password.`);
+    const r = this.sql.exec(`SELECT * FROM users WHERE badge=? AND active=1`, badge).toArray()[0];
+    if (!r) {
+      const count = (f && f.until > now - 15 * 60000 ? f.count : 0) + 1;
+      this.failedLogins.set(key, { count, until: count >= 20 ? now + 10 * 60000 : 0 });
+      throw new HttpError(401, 'Badge not recognized. Sign in with your name and password, then add your badge under My settings.');
+    }
+    const token = hex(crypto.getRandomValues(new Uint8Array(32)));
+    this.sql.exec(`INSERT INTO sessions (token,user_id,created_at,expires_at,last_used,agent) VALUES (?,?,?,?,?,?)`,
+      await sha256(token), r.id as string, now, now + SESSION_TTL, now, String(device || req.headers.get('User-Agent') || '').slice(0, 200));
+    this.sql.exec(`UPDATE users SET last_login=? WHERE id=?`, now, r.id as string);
+    return json({ token, user: this.publicUser(r) });
+  }
+
+  setBadge(userId: string, raw: string | null | undefined) {
+    if (raw == null || String(raw).trim() === '') { this.sql.exec(`UPDATE users SET badge=NULL WHERE id=?`, userId); return; }
+    const badge = normBadge(String(raw));
+    if (!badge) throw new HttpError(400, 'Badge numbers are 2 to 8 digits.');
+    const other = this.sql.exec(`SELECT name FROM users WHERE badge=? AND id<>?`, badge, userId).toArray()[0];
+    if (other) throw new HttpError(400, `Badge ${badge} already belongs to ${other.name}.`);
+    this.sql.exec(`UPDATE users SET badge=? WHERE id=?`, badge, userId);
+  }
+
   bootstrap(c: Ctx) {
     const u = this.need(c, 'viewer');
-    const row = this.sql.exec(`SELECT prefs, notif_seen FROM users WHERE id=?`, u.id).one();
+    const row = this.sql.exec(`SELECT prefs, notif_seen, badge FROM users WHERE id=?`, u.id).one();
     const docs: Record<string, unknown[]> = {};
     for (const k of DOC_KINDS) if (k !== 'settings') docs[k] = this.allDocs(k);
     return json({
-      me: { ...u, prefs: JSON.parse((row.prefs as string) || '{}') },
+      me: { ...u, badge: (row.badge as string) || null, prefs: JSON.parse((row.prefs as string) || '{}') },
       notifSeen: row.notif_seen || 0,
       users: this.users(u.role === 'admin'),
       settings: this.settings(),
@@ -410,7 +455,7 @@ export class Store extends DurableObject<Env> {
   async upsert(c: Ctx, kind: DocKind, id: string, patch: Record<string, unknown>) {
     // editors may change the printed order-guide layout; everything else in settings is admin-only
     const printOnly = kind === 'settings' && Object.keys(patch || {}).every((k) => k === 'printTemplate');
-    const u = this.need(c, kind === 'settings' && !printOnly ? 'admin' : 'editor');
+    const u = this.need(c, (kind === 'settings' && !printOnly) || kind === 'mechanics' ? 'admin' : 'editor');
     if (kind === 'settings') id = 'app';
     if (!/^[\w-]{1,64}$/.test(id)) throw new HttpError(400, 'Invalid id.');
     return this.upsertDoc(u, kind, id, patch);
@@ -465,6 +510,11 @@ export class Store extends DurableObject<Env> {
       else if (existing && p.qty !== beforeQty) this.movement(u, p, p.qty - beforeQty, 'adjust', null, opts.note || 'Count corrected on edit');
       if (!opts.quiet) this.stockAlert(existing ? stockStatus(existing as unknown as Part) : null, p);
     }
+    if (existing && kind === 'mechanics' && existing.name !== doc.name) {
+      for (const l of this.allDocs<PmLog>('pms')) {
+        if (l.doneBy === existing.name) { l.doneBy = doc.name as string; this.putDoc('pms', l as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'pms', doc: l }); }
+      }
+    }
     if (existing && (kind === 'manufacturers' || kind === 'vendors' || kind === 'machines') && existing.name !== doc.name) {
       this.cascadeRename(kind, existing.name as string, doc.name as string);
     }
@@ -497,7 +547,7 @@ export class Store extends DurableObject<Env> {
   }
 
   remove(c: Ctx, kind: DocKind, id: string) {
-    const u = this.need(c, 'editor');
+    const u = this.need(c, kind === 'mechanics' ? 'admin' : 'editor');
     if (kind === 'settings') throw new HttpError(400, 'Settings cannot be deleted.');
     const existing = this.getDoc<Record<string, unknown>>(kind, id);
     if (!existing) return { ok: true };
@@ -762,7 +812,7 @@ export class Store extends DurableObject<Env> {
     return {
       app: 'ppip', version: 1, exportedAt: Date.now(),
       users: includeSecrets
-        ? this.sql.exec(`SELECT id,email,name,role,pw,active,prefs,created_at,last_login FROM users`).toArray()
+        ? this.sql.exec(`SELECT id,email,name,role,pw,active,prefs,created_at,last_login,badge FROM users`).toArray()
         : this.users(false),
       docs,
       movements: this.sql.exec(`SELECT * FROM movements ORDER BY at`).toArray(),
@@ -817,8 +867,8 @@ export class Store extends DurableObject<Env> {
       for (const r of (snap.meta as Row[]) || []) this.sql.exec(`INSERT OR REPLACE INTO meta (key,value) VALUES (?,?)`, r.key, r.value);
       if (hasSecrets) {
         this.sql.exec(`DELETE FROM users`);
-        for (const r of users) this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at,last_login) VALUES (?,?,?,?,?,?,?,?,?)`,
-          r.id, r.email, r.name, r.role, r.pw, r.active ?? 1, r.prefs ?? '{}', r.created_at ?? Date.now(), r.last_login ?? null);
+        for (const r of users) this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at,last_login,badge) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          r.id, r.email, r.name, r.role, r.pw, r.active ?? 1, r.prefs ?? '{}', r.created_at ?? Date.now(), r.last_login ?? null, (r.badge as string) || null);
         // never lock the restoring admin out
         if (!this.sql.exec(`SELECT id FROM users WHERE id=? AND role='admin' AND active=1`, u.id).toArray().length) {
           const me = this.sql.exec(`SELECT id FROM users WHERE lower(email)=lower(?)`, u.email).toArray()[0];
@@ -845,20 +895,22 @@ export class Store extends DurableObject<Env> {
 
     if (a === 'users' && !id && m === 'GET') return json(this.users(true));
     if (a === 'users' && !id && m === 'POST') {
-      const b = await this.body<{ name: string; email: string; role: Role; password: string }>(req);
+      const b = await this.body<{ name: string; email: string; role: Role; password: string; badge?: string }>(req);
       const name = String(b.name || '').trim(); const email = String(b.email || '').trim().toLowerCase();
       if (!name || !email) throw new HttpError(400, 'Name and email are required.');
       if (!ROLES.includes(b.role)) throw new HttpError(400, 'Choose a role.');
       if (!b.password || b.password.length < 6) throw new HttpError(400, 'Password must be at least 6 characters.');
       this.assertUnique(name, email);
       const newId = uid();
-      this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at) VALUES (?,?,?,?,?,1,'{}',?)`, newId, email, name, b.role, await hashPassword(b.password), Date.now());
+      if (b.badge && !normBadge(b.badge)) throw new HttpError(400, 'Badge numbers are 2 to 8 digits.');
+      if (b.badge) { const other = this.sql.exec(`SELECT name FROM users WHERE badge=?`, normBadge(b.badge)).toArray()[0]; if (other) throw new HttpError(400, `Badge ${normBadge(b.badge)} already belongs to ${other.name}.`); }
+      this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at,badge) VALUES (?,?,?,?,?,1,'{}',?,?)`, newId, email, name, b.role, await hashPassword(b.password), Date.now(), b.badge ? normBadge(b.badge) : null);
       this.log(u, 'create', 'users', newId, `Created account for ${name} (${b.role})`);
       this.broadcast({ t: 'users', users: this.users(false) });
       return json(this.users(true).find((x) => x.id === newId));
     }
     if (a === 'users' && id && m === 'PATCH') {
-      const b = await this.body<{ name?: string; email?: string; role?: Role; password?: string; active?: boolean }>(req);
+      const b = await this.body<{ name?: string; email?: string; role?: Role; password?: string; active?: boolean; badge?: string | null }>(req);
       const cur = this.sql.exec(`SELECT * FROM users WHERE id=?`, id).toArray()[0];
       if (!cur) throw new HttpError(404, 'User not found.');
       const name = b.name != null ? String(b.name).trim() : (cur.name as string);
@@ -868,6 +920,7 @@ export class Store extends DurableObject<Env> {
       if (!ROLES.includes(role)) throw new HttpError(400, 'Invalid role.');
       this.assertUnique(name, email, id);
       if (cur.role === 'admin' && (role !== 'admin' || !active)) this.assertAnotherAdmin(id);
+      if (b.badge !== undefined) this.setBadge(id, b.badge);
       this.sql.exec(`UPDATE users SET name=?, email=?, role=?, active=? WHERE id=?`, name, email, role, active ? 1 : 0, id);
       if (b.password) {
         if (b.password.length < 6) throw new HttpError(400, 'Password must be at least 6 characters.');
@@ -1041,6 +1094,12 @@ export class Store extends DurableObject<Env> {
   }
 }
 
+/** Keep only the digits a scanner sends (some add prefixes/suffixes); valid badges are 2–8 digits. */
+function normBadge(raw: string): string | null {
+  const d = String(raw).replace(/\D/g, '');
+  return d.length >= 2 && d.length <= 8 ? d : null;
+}
+
 function singular(kind: string) {
-  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide', pms: 'PM' } as Record<string, string>)[kind] || kind;
+  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide', pms: 'PM', mechanics: 'mechanic' } as Record<string, string>)[kind] || kind;
 }

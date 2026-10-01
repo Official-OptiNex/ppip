@@ -10,6 +10,7 @@ export interface PublicUser {
   role: Role;
   active: boolean;
   lastLogin?: number | null;
+  badge?: string | null; // employee badge number (admins see all; each user sees their own)
   createdAt?: number;
   prefs?: UserPrefs;
 }
@@ -79,6 +80,15 @@ export interface Machine extends BaseDoc {
   pmTracked?: boolean; // shows on the PMs page
   pmWeeklyDays?: number; // next PM due this many days after the last PM of any type (default 7)
   pmMonthlyMonths?: number; // a monthly PM is required every N months (default 1)
+}
+
+/** People who do PMs and repairs (managed by admins; not necessarily app users). */
+export interface Mechanic extends BaseDoc {
+  name: string;
+  shift?: string; // one of Settings.shifts
+  phone?: string;
+  notes?: string;
+  inactive?: boolean; // left / no longer doing PMs (kept for history)
 }
 
 export type PmType = 'weekly' | 'monthly';
@@ -180,6 +190,8 @@ export interface Settings extends BaseDoc {
   currency?: string;
   printTemplate?: PrintTemplate;
   publicUrl?: string; // used for QR codes when running from USB
+  badgeLogin?: boolean; // allow one-scan badge sign-in (default on)
+  shifts?: string[]; // shift names mechanics can be assigned to
 }
 
 export interface DocMap {
@@ -190,10 +202,11 @@ export interface DocMap {
   equipment: Equipment;
   orders: OrderGuide;
   pms: PmLog;
+  mechanics: Mechanic;
   settings: Settings;
 }
 export type DocKind = keyof DocMap;
-export const DOC_KINDS: DocKind[] = ['parts', 'manufacturers', 'vendors', 'machines', 'equipment', 'orders', 'pms', 'settings'];
+export const DOC_KINDS: DocKind[] = ['parts', 'manufacturers', 'vendors', 'machines', 'equipment', 'orders', 'pms', 'mechanics', 'settings'];
 
 export interface Movement {
   id: string;
@@ -242,6 +255,7 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
     leadTimeDays: 'num', preferred: 'bool', notes: 'text',
   },
   machines: { name: 'str', area: 'str', notes: 'text', pmTracked: 'bool', pmWeeklyDays: 'num', pmMonthlyMonths: 'num' },
+  mechanics: { name: 'str', shift: 'str', phone: 'str', notes: 'text', inactive: 'bool' },
   pms: { machine: 'str', date: 'str', type: 'str', doneBy: 'str', nextDue: 'str', notes: 'text' },
   equipment: {
     type: 'str', tag: 'str', status: 'str', machine: 'str', position: 'str', installedAt: 'time', lastServiceAt: 'time', pmDays: 'num',
@@ -254,7 +268,7 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   },
   settings: {
     companyName: 'str', department: 'str', categories: 'strs', locations: 'strs', units: 'strs', knifePmDays: 'num',
-    rollerPmDays: 'num', weeklyReportDay: 'num', currency: 'str', printTemplate: 'json', publicUrl: 'str',
+    rollerPmDays: 'num', weeklyReportDay: 'num', currency: 'str', printTemplate: 'json', publicUrl: 'str', badgeLogin: 'bool', shifts: 'strs',
   },
 };
 
@@ -300,6 +314,7 @@ export const DEFAULT_SETTINGS: Settings = {
   categories: ['Bearings', 'Belts', 'Electrical', 'Fasteners', 'Heaters', 'Hot Knives', 'Hydraulics', 'Motors', 'Pneumatics', 'Rollers', 'Sensors', 'Seals & O-Rings', 'Springs', 'Tooling', 'Other'],
   locations: ['Crib A', 'Crib B', 'Maint. Shop', 'Line Side'],
   units: ['ea', 'pk', 'box', 'ft', 'in', 'm', 'roll', 'set', 'pair', 'gal', 'lb'],
+  shifts: ['1st shift (days)', '2nd shift (afternoons)', '3rd shift (nights)', 'Weekend'],
   knifePmDays: 30,
   rollerPmDays: 180,
   weeklyReportDay: 1,

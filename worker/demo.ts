@@ -15,6 +15,9 @@ export function demoData() {
   const machines: Machine[] = ['Bag Machine 1', 'Bag Machine 2', 'Bag Machine 3', 'Bag Machine 4', 'Extruder A', 'Extruder B', 'Printer 1', 'Winder 2']
     .map((name, i) => ({ id: `demo-m${i}`, name, area: i < 4 ? 'Converting' : i < 6 ? 'Extrusion' : 'Printing', pmTracked: i < 6 }));
 
+  const shifts = ['1st shift (days)', '2nd shift (afternoons)', '3rd shift (nights)'];
+  const mechanics = people.map((name, i) => ({ id: `demo-mech-${i}`, name, shift: shifts[i % 3] }));
+
   // ~2 months of machine PMs (one machine left overdue, one due today)
   const pms: PmLog[] = [];
   const today = fmtDay(new Date(now));
@@ -122,7 +125,7 @@ export function demoData() {
   }
 
   return {
-    docs: { machines, vendors, parts, equipment, pms } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
+    docs: { machines, vendors, parts, equipment, pms, mechanics } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
     movements,
   };
 }

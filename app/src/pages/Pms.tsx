@@ -4,6 +4,8 @@ import type { Machine, PmLog, PmType } from '../../../shared/types';
 import { addDays, machinePmState, parseDay, suggestNextDue, DEFAULT_MONTHLY_MONTHS, DEFAULT_WEEKLY_DAYS, type MachinePmState, type PmStatus } from '../../../shared/pm';
 import { deleteDoc, getState, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { pmDueCount, usePmStates, useToday } from '../lib/pmhooks';
+import { useShifts } from './Mechanics';
+import type { Mechanic } from '../../../shared/types';
 import { download, matches, navigate, setQuery, toCSV, uniqueSorted } from '../lib/util';
 import { Combobox, Empty, Field, Modal, NumberInput, SearchInput, Seg, Tabs, confirmDialog } from '../components/ui';
 
@@ -75,6 +77,7 @@ export function PmsPage({ tab: t, query }: { tab?: string; query: URLSearchParam
 
 function Schedule({ states, canEdit, onLog }: { states: MachinePmState[]; canEdit: boolean; onLog: (machine: string, type: PmType) => void }) {
   const machines = useStore((s) => s.docs.machines);
+  const mechanics = useStore((s) => s.docs.mechanics);
   if (!states.length) {
     return <div className="card"><Empty icon={<Wrench size={48} />} title="No machines set up for PMs yet">
       {canEdit && <p>Go to <a href="#/pms/setup">Machines & settings</a> to add machines or turn PM tracking on.</p>}
@@ -98,7 +101,7 @@ function Schedule({ states, canEdit, onLog }: { states: MachinePmState[]; canEdi
                   <span className={`pill ${PM_STATUS_CLS[st.status]}`} style={{ marginTop: 4 }}>{dueText(st)}</span>
                 </>}
               </td>
-              <td>{st.lastAny ? <>{fmtDayLong(st.lastAny.date)}<div className="small muted">{TYPE_LABEL[st.lastAny.type]}{st.lastAny.doneBy ? ` · ${st.lastAny.doneBy}` : ''}</div></> : <span className="muted">—</span>}</td>
+              <td>{st.lastAny ? <>{fmtDayLong(st.lastAny.date)}<div className="small muted">{TYPE_LABEL[st.lastAny.type]}{st.lastAny.doneBy ? ` · ${st.lastAny.doneBy}${shiftShort(mechanics, st.lastAny.doneBy)}` : ''}</div></> : <span className="muted">—</span>}</td>
               <td>
                 {st.lastMonthly ? <>Last: {fmtDayLong(st.lastMonthly.date)}</> : <span className="muted">No monthly yet</span>}
                 <div className="small muted">Next monthly: {st.lastMonthly ? fmtDayLong(st.nextMonthly) : 'due now'}</div>
@@ -119,6 +122,9 @@ function Schedule({ states, canEdit, onLog }: { states: MachinePmState[]; canEdi
 
 function HistoryTab({ canEdit, onEdit }: { canEdit: boolean; onEdit: (e: PmLog) => void }) {
   const pms = useStore((s) => s.docs.pms);
+  const mechanics = useStore((s) => s.docs.mechanics);
+  const shifts = useShifts();
+  const [shift, setShift] = useState('');
   const route = new URLSearchParams(location.hash.split('?')[1] || '');
   const [q, setQ] = useState('');
   const [machine, setMachine] = useState(route.get('machine') || '');
@@ -126,14 +132,14 @@ function HistoryTab({ canEdit, onEdit }: { canEdit: boolean; onEdit: (e: PmLog) 
   const all = useMemo(() => Object.values(pms), [pms]);
   const machines = useMemo(() => uniqueSorted(all.map((l) => l.machine)), [all]);
   const list = useMemo(() => all
-    .filter((l) => (!machine || l.machine === machine) && (!type || l.type === type) && matches(q, l.machine, l.doneBy, l.notes, l.type))
+    .filter((l) => (!machine || l.machine === machine) && (!type || l.type === type) && (!shift || mechShift(mechanics, l.doneBy) === shift) && matches(q, l.machine, l.doneBy, l.notes, l.type))
     .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0)), [all, machine, type, q]);
 
   const remove = async (l: PmLog) => {
     if (!(await confirmDialog({ title: 'Delete this PM entry?', body: `${TYPE_LABEL[l.type]} PM on ${l.machine}, ${fmtDayLong(l.date)}. The schedule recalculates from the remaining entries.`, confirm: 'Delete', danger: true }))) return;
     try { await deleteDoc('pms', l.id); toast('PM entry deleted'); } catch (e) { toastError(e); }
   };
-  const exportCsv = () => download(`pm-history-${new Date().toISOString().slice(0, 10)}.csv`, '﻿' + toCSV(list.map((l) => ({ date: l.date, machine: l.machine, type: TYPE_LABEL[l.type], doneBy: l.doneBy || '', nextDue: l.nextDue || '', notes: l.notes || '', loggedBy: l.updatedBy || '' }))), 'text/csv');
+  const exportCsv = () => download(`pm-history-${new Date().toISOString().slice(0, 10)}.csv`, '﻿' + toCSV(list.map((l) => ({ date: l.date, machine: l.machine, type: TYPE_LABEL[l.type], doneBy: l.doneBy || '', shift: mechShift(mechanics, l.doneBy), nextDue: l.nextDue || '', notes: l.notes || '', loggedBy: l.updatedBy || '' }))), 'text/csv');
 
   return (
     <div>
@@ -141,6 +147,7 @@ function HistoryTab({ canEdit, onEdit }: { canEdit: boolean; onEdit: (e: PmLog) 
         <SearchInput value={q} onChange={setQ} placeholder="Search by machine, person, notes…" />
         <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={machine} onChange={(e) => setMachine(e.target.value)}><option value="">All machines</option>{machines.map((m) => <option key={m}>{m}</option>)}</select>
         <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={type} onChange={(e) => setType(e.target.value as '' | PmType)}><option value="">Weekly & monthly</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
+        <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={shift} onChange={(e) => setShift(e.target.value)} aria-label="Shift"><option value="">All shifts</option>{shifts.map((sh) => <option key={sh}>{sh}</option>)}</select>
         <button className="btn" onClick={exportCsv} title="Export CSV" style={{ minHeight: '3rem' }}><Download size={18} /></button>
       </div>
       {list.length === 0 ? <div className="card"><Empty icon={<History size={48} />} title="No PMs logged yet" /></div> : (
@@ -153,7 +160,7 @@ function HistoryTab({ canEdit, onEdit }: { canEdit: boolean; onEdit: (e: PmLog) 
                   <td className="nowrap"><b>{fmtDayLong(l.date)}</b></td>
                   <td>{l.machine}</td>
                   <td><span className={`pill ${l.type === 'monthly' ? 'info' : 'neutral'}`}>{TYPE_LABEL[l.type]}</span></td>
-                  <td>{l.doneBy || <span className="muted">—</span>}</td>
+                  <td>{l.doneBy || <span className="muted">—</span>}{l.doneBy && mechShift(mechanics, l.doneBy) && <div className="small muted">{mechShift(mechanics, l.doneBy)}</div>}</td>
                   <td className="nowrap">{l.nextDue ? fmtDayLong(l.nextDue) : '—'}</td>
                   <td className="small" style={{ maxWidth: 320 }}>{l.notes}</td>
                   {canEdit && <td><div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
@@ -251,6 +258,7 @@ export function LogPmDialog({ machine: initialMachine, entry, type: initialType,
   const machines = useStore((s) => s.docs.machines);
   const pms = useStore((s) => s.docs.pms);
   const users = useStore((s) => s.users);
+  const mechanicDocs = useStore((s) => s.docs.mechanics);
   const me = useStore((s) => s.me);
   const today = useToday();
   const tracked = useMemo(() => Object.values(machines).filter((m) => m.pmTracked).map((m) => m.name).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [machines]);
@@ -287,7 +295,11 @@ export function LogPmDialog({ machine: initialMachine, entry, type: initialType,
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
 
-  const people = uniqueSorted([...users.filter((u) => u.active !== false).map((u) => u.name), ...logs.map((l) => l.doneBy)]);
+  // "Who did it" = the mechanics list (admins manage it); falls back to user names until mechanics are added
+  const crew = Object.values(mechanicDocs).filter((m) => !m.inactive).sort((a, b) => (a.shift || '').localeCompare(b.shift || '') || a.name.localeCompare(b.name));
+  const people = crew.length ? crew.map((m) => m.name) : uniqueSorted([...users.filter((u) => u.active !== false).map((u) => u.name), ...logs.map((l) => l.doneBy)]);
+  const shiftOf = (n: string) => crew.find((m) => m.name === n)?.shift || '';
+  const meIsMechanic = !crew.length || crew.some((m) => m.name === me?.name);
   return (
     <Modal title={entry ? 'Edit PM entry' : 'Log a PM'} icon={<Wrench color="var(--primary)" />} onClose={onClose}
       footer={<><button className="btn lg" onClick={onClose}>Cancel</button><button className="btn primary lg" onClick={save} disabled={busy}><CalendarCheck />{busy ? 'Saving…' : entry ? 'Save' : 'Log PM'}</button></>}>
@@ -301,10 +313,10 @@ export function LogPmDialog({ machine: initialMachine, entry, type: initialType,
             <Seg value={(d.type || 'weekly') as PmType} onChange={(v) => set('type', v)} options={[{ id: 'weekly', label: 'Weekly' }, { id: 'monthly', label: 'Monthly' }]} />
           </Field>
         </div>
-        <Field label="Who did it (optional)">
+        <Field label="Who did it (optional)" hint={crew.length ? undefined : 'Tip: an admin can add the mechanics and their shifts under Admin → Mechanics & shifts.'}>
           <div className="row">
-            <div className="grow"><Combobox value={d.doneBy || ''} onChange={(v) => set('doneBy', v)} options={people} placeholder="Name" /></div>
-            {me && d.doneBy !== me.name && <button type="button" className="btn" onClick={() => set('doneBy', me.name)}>Me</button>}
+            <div className="grow"><Combobox value={d.doneBy || ''} onChange={(v) => set('doneBy', v)} options={people} placeholder={crew.length ? 'Pick a mechanic' : 'Name'} renderSub={crew.length ? shiftOf : undefined} /></div>
+            {me && meIsMechanic && d.doneBy !== me.name && <button type="button" className="btn" onClick={() => set('doneBy', me.name)}>Me</button>}
           </div>
         </Field>
         <Field label="Next PM due" hint={autoNext ? 'Filled in automatically from the PM rules. Change it if needed.' : 'Set by hand.'}>
@@ -317,4 +329,13 @@ export function LogPmDialog({ machine: initialMachine, entry, type: initialType,
       </form>
     </Modal>
   );
+}
+
+function mechShift(mechanics: Record<string, Mechanic>, name?: string) {
+  if (!name) return '';
+  return Object.values(mechanics).find((m) => m.name === name)?.shift || '';
+}
+function shiftShort(mechanics: Record<string, Mechanic>, name?: string) {
+  const sh = mechShift(mechanics, name);
+  return sh ? ` (${sh.replace(/\s*\(.*\)$/, '')})` : '';
 }

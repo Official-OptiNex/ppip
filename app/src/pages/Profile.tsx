@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { startTour } from '../components/Tour';
+import { BadgeCard } from '../components/BadgeSetup';
 import { GraduationCap, LogOut, KeyRound, Sun, Moon, Monitor, Bell, Save } from 'lucide-react';
 import { api, errorMessage, isFileMode } from '../lib/api';
 import { logout, savePrefs, toast, useStore } from '../lib/store';
@@ -67,6 +68,8 @@ export function ProfilePage() {
         {err && <div className="banner danger">{err}</div>}
         <div><button className="btn primary" disabled={busy}><Save size={18} />Change password</button></div>
       </form>
+
+      <BadgeCard />
 
       <div className="card card-pad row wrap" style={{ justifyContent: 'space-between' }}>
         <div><b>Guided tour</b><div className="small muted">A 2-minute walk through the app.</div></div>

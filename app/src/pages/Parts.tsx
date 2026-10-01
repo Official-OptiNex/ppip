@@ -102,7 +102,6 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
         </div>
         <div className="btn-group">
           {(counts.low + counts.order + counts.out > 0) && canEdit && <a className="btn" href="#/orders/new?from=low"><ShoppingCart size={19} />Order low stock</a>}
-          <button className="btn" onClick={exportView} title="Download this list as CSV (opens in Excel)"><Download size={19} /><span className="desktop-only">Export list</span></button>
           {canEdit && <button className="btn primary lg" data-tour="add-part" onClick={() => setEditing('new')}><Plus size={22} />Add part</button>}
         </div>
       </div>
@@ -116,8 +115,10 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
         </div>
         <div className="chips scroll" data-tour="status-chips" role="group" aria-label="Stock status">
           {([
-            ['active', 'All active', counts.all, ''], ['ok', 'In stock', counts.ok, 'ok'], ['low', 'Running low', counts.low, 'low'],
-            ['order', 'Order now', counts.order, 'order'], ['out', 'Out of stock', counts.out, 'out'], ['reorder', 'Needs reorder (all)', counts.low + counts.order + counts.out, 'low'], ['retired', 'Decommissioned', counts.retired, ''], ['all', 'Everything', all.length, ''],
+            ['active', 'All', counts.all, ''], ['ok', 'In stock', counts.ok, 'ok'], ['low', 'Running low', counts.low, 'low'],
+            ['order', 'Order now', counts.order, 'order'], ['out', 'Out of stock', counts.out, 'out'],
+            // rarer views only appear as a button while selected (otherwise they live under Filters → Show)
+            ...(['reorder', 'retired', 'all'].includes(status) ? [[status, status === 'reorder' ? 'Needs reorder' : status === 'retired' ? 'Decommissioned' : 'Everything', status === 'reorder' ? counts.low + counts.order + counts.out : status === 'retired' ? counts.retired : all.length, status === 'reorder' ? 'low' : ''] as const] : []),
           ] as const).map(([id, label, n, cls]) => (
             <button key={id} className={`filter-chip ${cls} ${status === id ? 'on' : ''}`} onClick={() => setQuery({ status: id === 'active' ? null : id })} aria-pressed={status === id}>
               {cls && <span className={`dot ${cls}`} />}{label}<span className="n">{n}</span>
@@ -136,6 +137,13 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
               </div>
             ))}
             <div className="field">
+              <label>Show</label>
+              <select className="input" value={status} onChange={(e) => setQuery({ status: e.target.value === 'active' ? null : e.target.value })}>
+                <option value="active">Active parts</option><option value="reorder">Everything that needs ordering</option>
+                <option value="retired">Decommissioned only</option><option value="all">Everything (incl. decommissioned)</option>
+              </select>
+            </div>
+            <div className="field">
               <label>Sort by</label>
               <select className="input" value={`${sort}:${dir}`} onChange={(e) => { const [k, d] = e.target.value.split(':'); setQuery({ sort: k, dir: d === '-1' ? 'desc' : null }); }}>
                 <option value="name:1">Name A–Z</option><option value="status:1">Status (out first)</option><option value="qty:1">Qty low → high</option>
@@ -143,6 +151,7 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
                 <option value="location:1">Location</option><option value="category:1">Category</option><option value="updatedAt:-1">Recently changed</option>
               </select>
             </div>
+            <div className="field" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={exportView} title="Download this list as CSV (opens in Excel)"><Download size={18} />Download this list</button></div>
             {activeFilters > 0 && <div className="field" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={() => setQuery({ mfr: null, cat: null, loc: null, vendor: null, machine: null })}><FilterX size={18} />Clear filters</button></div>}
           </div>
         )}
