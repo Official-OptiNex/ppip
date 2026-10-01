@@ -49,7 +49,7 @@ export function ProfilePage() {
         <h2 style={{ marginTop: '0.6rem' }}>Appearance</h2>
         <div className="grid-3">
           {([['light', 'Light', <Sun key="s" />], ['dark', 'Dark', <Moon key="m" />], ['system', 'Match computer', <Monitor key="c" />]] as const).map(([id, label, icon]) => (
-            <button key={id} className={`btn lg ${(prefs.theme || 'light') === id ? 'primary' : ''}`} onClick={() => savePrefs({ theme: id })}>{icon}{label}</button>
+            <button key={id} className={`btn lg ${(prefs.theme || 'dark') === id ? 'primary' : ''}`} onClick={() => savePrefs({ theme: id })}>{icon}{label}</button>
           ))}
         </div>
         <h2 style={{ marginTop: '0.6rem' }}>Pop-up alerts</h2>

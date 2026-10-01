@@ -1,4 +1,5 @@
-import { CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck, Smartphone, Search, Flame, Printer, Wifi, Usb } from 'lucide-react';
+import { DEFAULT_WEEKLY_DAYS } from '../../../shared/pm';
+import { Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck, Smartphone, Search, Flame, Printer, Wifi, Usb } from 'lucide-react';
 
 export function HelpPage() {
   const Item = ({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) => (
@@ -27,7 +28,8 @@ export function HelpPage() {
           <Item icon={<ClipboardCheck />} title="Counted the shelf">Open the part → <b>Count</b> and enter what's actually there.</Item>
           <Item icon={<Smartphone />} title="Add a photo with your phone">Edit a part → <b>Take photo with phone</b> → scan the QR code with your phone camera → take the picture → Send. It appears on the computer by itself.</Item>
           <Item icon={<Printer />} title="Order guide instead of paper">Order Guides → <b>New order guide</b>. Type the parts (it fills in part numbers from inventory), then <b>Print</b>. “From low stock” builds the list for you.</Item>
-          <Item icon={<Flame />} title="Hot knives & rollers">Install, move or remove them. The page counts how many days each one has been on its machine. Rollers also have a PM interval and turn orange/red when service is due.</Item>
+          <Item icon={<Wrench />} title="Machine PMs">Open <b>PMs</b> → <b>Log a PM</b>: pick the machine, the date, weekly or monthly, and (optionally) who did it. The next due date fills in automatically: {DEFAULT_WEEKLY_DAYS} days after the last PM of any type, and a monthly PM once a month. Overdue machines turn red.</Item>
+          <Item icon={<Flame />} title="Hot knives & rollers">Install, move or remove them. The page counts how many days each one has been on its machine.</Item>
         </div>
       </div>
 

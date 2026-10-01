@@ -6,14 +6,16 @@ A private, live-updating web app for a maintenance / process engineering departm
 - **Stock tracking**: one-click Take / Receive / Count, with a full history of who did what.
 - **Alerts**: in-app notifications (plus optional Windows / phone pop-ups) when a part runs low or runs out, and when a knife or roller PM is due.
 - **Order guides**: type up parts requests, then print them in your own format (the layout is editable). You can build one from low stock in one click and receive it back into stock.
-- **Hot knife and roller PM tracking**: which machine each one is on, how long it's been there, when it's due. Includes a "by machine" view and full history.
+- **Machine PMs**: log weekly / monthly PMs (machine, date, who did it). The next due date is automatic: 7 days after the last PM of any type, plus a monthly PM once a month. Shows overdue / due-today alerts, history, and per-machine settings.
+- **Hot knives and rollers**: which machine each one is on and how long it's been there, with a "by machine" view and full history.
+- **Quick log bubble**: a button on every page to log parts used or received in a few taps.
 - **Analytics and reports**: most-used parts, monthly usage and cost, parts that often run out, usage by machine, supplier tracking (preferred supplier, lead time, spend), and a weekly/monthly report you can print.
-- **Suppliers and manufacturers**: dropdowns with **automatic order links** built from the part number (McMaster, Grainger, MSC, Motion and ~35 more come pre-loaded).
+- **Suppliers and manufacturers**: ~110 manufacturers and ~30 suppliers pre-loaded, with **automatic order links** built from the part number wherever the site's search link is known (all editable).
 - **Import / export**: Excel (.xlsx) and CSV import with automatic column matching, plus Excel, CSV and full JSON export.
-- **QR bin labels**: print labels; scanning one with a phone opens that part.
+- **QR labels**: 4×6 thermal labels (e.g. Zebra GK420d, tall or sideways) or a letter sheet; scanning one with a phone opens that part.
 - **Phone photos**: on a PC, click "Take photo with phone", scan the QR code, snap a picture, and it appears on the PC.
 - **Accounts**: Viewer, Editor and Admin roles. The admin panel covers users, storage and usage, signed-in devices, backups and settings.
-- **Easy to read**: large text by default, a Standard / Large / Extra-large text size per person, and light and dark themes.
+- **Easy to read**: large text by default, a Standard / Large / Extra-large text size per person, and a one-click light / dark switch (dark by default).
 - **Works everywhere**: any browser, phones (can be installed like an app), and a **portable USB version** that needs no install. All of them share the same live data.
 - **Offline-tolerant**: if the internet drops, you can keep working. Changes are queued and sync when the connection returns.
 - **Backups**: an automatic daily snapshot (21 days kept), an optional nightly off-site copy to this private GitHub repo, and a one-click download or restore.

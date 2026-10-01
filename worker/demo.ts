@@ -1,5 +1,6 @@
 // Sample data so the app can be tried out before real parts are entered (Admin → System → Load demo data).
-import type { DocKind, Equipment, Machine, Part, Vendor } from '../shared/types';
+import type { DocKind, Equipment, Machine, Part, PmLog, Vendor } from '../shared/types';
+import { addDays, addMonths, fmtDay } from '../shared/pm';
 
 const DAY = 86_400_000;
 
@@ -9,9 +10,26 @@ export function demoData() {
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
   const now = Date.now();
+  const people = ['Nick', 'Dave', 'Frank', 'Maria', 'Tom'];
 
   const machines: Machine[] = ['Bag Machine 1', 'Bag Machine 2', 'Bag Machine 3', 'Bag Machine 4', 'Extruder A', 'Extruder B', 'Printer 1', 'Winder 2']
-    .map((name, i) => ({ id: `demo-m${i}`, name, area: i < 4 ? 'Converting' : i < 6 ? 'Extrusion' : 'Printing' }));
+    .map((name, i) => ({ id: `demo-m${i}`, name, area: i < 4 ? 'Converting' : i < 6 ? 'Extrusion' : 'Printing', pmTracked: i < 6 }));
+
+  // ~2 months of machine PMs (one machine left overdue, one due today)
+  const pms: PmLog[] = [];
+  const today = fmtDay(new Date(now));
+
+  machines.filter((m) => m.pmTracked).forEach((m, mi) => {
+    let date = addDays(today, -63 + mi);
+    let lastMonthly = '';
+    const endOffset = mi === 1 ? -10 : mi === 2 ? -7 : -1; // machine 2 overdue, machine 3 due today
+    while (date <= addDays(today, endOffset)) {
+      const monthly = !lastMonthly || addMonths(lastMonthly, 1) <= date;
+      if (monthly) lastMonthly = date;
+      pms.push({ id: `demo-pm-${mi}-${date}`, machine: m.name, date, type: monthly ? 'monthly' : 'weekly', doneBy: rnd() > 0.2 ? pick(people) : '', notes: monthly ? 'Full monthly checklist, lubed bearings, checked belts' : '' });
+      date = addDays(date, 7);
+    }
+  });
 
   const vendors: Vendor[] = [
     { id: 'demo-v1', name: 'McMaster-Carr', website: 'https://www.mcmaster.com', urlTemplate: 'https://www.mcmaster.com/{pn}', leadTimeDays: 1, preferred: true, phone: '(630) 833-0300' },
@@ -87,7 +105,6 @@ export function demoData() {
 
   // ~10 months of usage history
   const movements: { partId: string; partName: string; delta: number; qtyAfter: number; kind: string; machine: string; userName: string; unitCost: number; at: number }[] = [];
-  const people = ['Nick', 'Dave', 'Frank', 'Maria', 'Tom'];
   for (const p of parts.filter((x) => !x.decommissioned)) {
     const rate = rnd() * 0.25 + 0.02;
     let q = p.qty + 20;
@@ -106,7 +123,7 @@ export function demoData() {
   }
 
   return {
-    docs: { machines, vendors, parts, equipment } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
+    docs: { machines, vendors, parts, equipment, pms } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
     movements,
   };
 }

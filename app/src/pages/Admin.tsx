@@ -290,8 +290,8 @@ function SettingsTab() {
   const save = async () => {
     setBusy(true);
     try {
-      const { companyName, department, rollerPmDays, weeklyReportDay, currency, publicUrl } = d;
-      await saveDoc('settings', 'app', { companyName, department, rollerPmDays, weeklyReportDay, currency, publicUrl });
+      const { companyName, department, weeklyReportDay, currency, publicUrl } = d;
+      await saveDoc('settings', 'app', { companyName, department, weeklyReportDay, currency, publicUrl });
       toast('Settings saved');
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
@@ -300,7 +300,6 @@ function SettingsTab() {
       <div className="card card-pad grid-2">
         <Field label="Company / plant name"><input className="input" value={d.companyName || ''} onChange={(e) => set('companyName', e.target.value)} /></Field>
         <Field label="Department"><input className="input" value={d.department || ''} onChange={(e) => set('department', e.target.value)} /></Field>
-        <Field label="Roller PM interval (days)" hint="Default change / inspection interval"><NumberInput value={d.rollerPmDays} onChange={(v) => set('rollerPmDays', v ?? undefined)} min={0} /></Field>
         <Field label="Weekly report starts on">
           <select className="input" value={d.weeklyReportDay ?? 1} onChange={(e) => set('weeklyReportDay', Number(e.target.value))}>
             {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((n, i) => <option key={n} value={i}>{n}</option>)}

@@ -485,3 +485,30 @@ button.list-item { width: 100%; border-left: 0; border-right: 0; border-top: 0; 
   .fab { right: 1rem; bottom: calc(4.6rem + env(safe-area-inset-bottom)); height: 3.6rem; min-width: 3.6rem; padding: 0; justify-content: center; }
   .fab-label { display: none; }
 }
+
+/* ---------------- 4"×6" thermal labels (Zebra GK420d etc.) ---------------- */
+.zlabel { width: 4in; height: 6in; background: #fff; color: #000; position: relative; overflow: hidden; break-after: page; page-break-after: always; font-family: Arial, "Helvetica Neue", sans-serif; }
+.zl-inner { position: absolute; inset: 0; padding: 0.22in; display: flex; flex-direction: column; gap: 0.06in; }
+.zl-top { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid #000; padding-bottom: 0.05in; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.3em; }
+.zl-name { font-weight: 900; line-height: 1.08; max-height: 3.3em; overflow: hidden; overflow-wrap: anywhere; }
+.zl-pn { font-family: "Consolas", "Courier New", monospace; font-weight: 700; font-size: 20pt; line-height: 1.1; overflow-wrap: anywhere; }
+.zl-mfr { font-size: 13pt; font-weight: 700; }
+.zl-qr { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.zl-qr img { width: 2.45in; height: 2.45in; image-rendering: pixelated; }
+.zl-scan { font-size: 8pt; font-weight: 700; letter-spacing: 0.08em; margin-top: 0.04in; }
+.zl-row { display: flex; gap: 0.08in; }
+.zl-box { flex: 1; border: 3px solid #000; border-radius: 6px; padding: 0.05in 0.08in; display: flex; flex-direction: column; min-width: 0; }
+.zl-box span { font-size: 8pt; font-weight: 700; letter-spacing: 0.06em; }
+.zl-box b { font-size: 17pt; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }
+.zl-grow { flex: 1; }
+/* landscape: a 6"×4" design printed sideways on the same 4"×6" stock */
+.zl-inner.land { width: 6in; height: 4in; flex-direction: row; gap: 0.2in; inset: auto; top: 0; left: 0; transform-origin: top left; transform: translateX(4in) rotate(90deg); }
+.zl-inner.land .zl-qr { flex: none; width: 2.7in; }
+.zl-inner.land .zl-qr img { width: 2.6in; height: 2.6in; }
+.zl-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.05in; }
+/* on-screen preview: shrink, and show the wide label the right way round */
+.zpreview { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+.zpreview .zlabel { zoom: 0.62; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); }
+.zpreview .zlabel.is-land { width: 6in; height: 4in; }
+.zpreview .zl-inner.land { transform: none; }
+@media print { .zlabel { border: 0 !important; } }

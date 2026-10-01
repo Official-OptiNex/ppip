@@ -2,10 +2,11 @@
 // Every change is broadcast to all connected screens over WebSockets so the app updates live.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  DEFAULT_SETTINGS, DOC_KINDS, FIELD_SPECS, ROLES, SEED_MANUFACTURERS, stockStatus,
-  type DocKind, type Equipment, type Part, type PublicUser, type Role, type StockStatus, type UserPrefs,
+  DEFAULT_SETTINGS, DOC_KINDS, FIELD_SPECS, ROLES, SEED_MANUFACTURERS, SEED_VENDORS, stockStatus,
+  type DocKind, type Equipment, type Machine, type Part, type PmLog, type PublicUser, type Role, type StockStatus, type UserPrefs,
 } from '../shared/types';
 import { demoData } from './demo';
+import { fmtDay, machinePmState } from '../shared/pm';
 
 interface Env { BACKUP_KEY?: string }
 
@@ -134,6 +135,16 @@ export class Store extends DurableObject<Env> {
       this.putDoc('settings', { ...DEFAULT_SETTINGS, createdAt: now, updatedAt: now });
       for (const m of SEED_MANUFACTURERS) this.putDoc('manufacturers', { id: uid(), ...m, createdAt: now, updatedAt: now });
       this.sql.exec(`INSERT INTO meta (key,value) VALUES ('seeded','1'), ('orderSeq','0')`);
+    }
+    // seed v2: add any built-in manufacturers / suppliers that are missing (never overwrites your edits)
+    const seedV = Number(this.sql.exec(`SELECT value FROM meta WHERE key='seedVersion'`).toArray()[0]?.value || 1);
+    if (seedV < 2) {
+      const now = Date.now();
+      for (const [kind, list] of [['manufacturers', SEED_MANUFACTURERS], ['vendors', SEED_VENDORS]] as const) {
+        const have = new Set(this.allDocs<{ name: string }>(kind).map((d) => d.name.toLowerCase()));
+        for (const m of list) if (!have.has(m.name.toLowerCase())) this.putDoc(kind, { id: uid(), ...m, createdAt: now, updatedAt: now });
+      }
+      this.sql.exec(`INSERT OR REPLACE INTO meta (key,value) VALUES ('seedVersion','2')`);
     }
   }
 
@@ -410,7 +421,13 @@ export class Store extends DurableObject<Env> {
     const changes = clean(kind, patch);
     const doc: Record<string, unknown> = { ...(existing || {}), ...changes, id, updatedAt: now, updatedBy: u?.name ?? 'System', createdAt: existing?.createdAt ?? now };
 
-    if (kind !== 'settings' && kind !== 'orders' && kind !== 'equipment' && !String(doc.name ?? '').trim()) throw new HttpError(400, 'Name is required.');
+    if (kind !== 'settings' && kind !== 'orders' && kind !== 'equipment' && kind !== 'pms' && !String(doc.name ?? '').trim()) throw new HttpError(400, 'Name is required.');
+    if (kind === 'pms') {
+      if (!String(doc.machine ?? '').trim()) throw new HttpError(400, 'Choose a machine.');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(doc.date ?? ''))) throw new HttpError(400, 'Enter the date the PM was done.');
+      if (doc.type !== 'weekly' && doc.type !== 'monthly') throw new HttpError(400, 'PM type must be weekly or monthly.');
+      if (doc.nextDue && !/^\d{4}-\d{2}-\d{2}$/.test(String(doc.nextDue))) doc.nextDue = null;
+    }
     if (kind === 'equipment') {
       if (!doc.tag) throw new HttpError(400, 'Tag / ID is required.');
       if (!['knife', 'roller'].includes(doc.type as string)) throw new HttpError(400, 'Type must be knife or roller.');
@@ -451,7 +468,7 @@ export class Store extends DurableObject<Env> {
       this.cascadeRename(kind, existing.name as string, doc.name as string);
     }
     if (!opts.quiet && kind !== 'settings') {
-      const label = (doc.name || doc.tag || doc.title || id) as string;
+      const label = (kind === 'pms' ? `${doc.type === 'monthly' ? 'Monthly' : 'Weekly'} PM on ${doc.machine} (${doc.date})${doc.doneBy ? ` by ${doc.doneBy}` : ''}` : doc.name || doc.tag || doc.title || id) as string;
       const summary = existing ? `Updated ${singular(kind)} “${label}”` : `Added ${singular(kind)} “${label}”`;
       this.log(u, existing ? 'update' : 'create', kind, id, summary + (kind === 'orders' ? ` (${doc.number})` : ''));
     }
@@ -472,6 +489,9 @@ export class Store extends DurableObject<Env> {
       for (const e of this.allDocs<Equipment>('equipment')) {
         if (e.machine === from) { e.machine = to; e.updatedAt = now; this.putDoc('equipment', e as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'equipment', doc: e }); }
       }
+      for (const l of this.allDocs<PmLog>('pms')) {
+        if (l.machine === from) { l.machine = to; l.updatedAt = now; this.putDoc('pms', l as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'pms', doc: l }); }
+      }
     }
   }
 
@@ -483,7 +503,7 @@ export class Store extends DurableObject<Env> {
     this.sql.exec(`DELETE FROM docs WHERE kind=? AND id=?`, kind, id);
     if (kind === 'parts' && existing.imageId) this.sql.exec(`DELETE FROM images WHERE id=?`, existing.imageId as string);
     this.broadcast({ t: 'delete', kind, id });
-    this.log(u, 'delete', kind, id, `Deleted ${singular(kind)} “${existing.name || existing.tag || existing.title || id}”`);
+    this.log(u, 'delete', kind, id, `Deleted ${singular(kind)} “${kind === 'pms' ? `${existing.type} PM on ${existing.machine} (${existing.date})` : existing.name || existing.tag || existing.title || id}”`);
     return { ok: true };
   }
 
@@ -918,7 +938,14 @@ export class Store extends DurableObject<Env> {
     if (a === 'demo' && m === 'POST') {
       if (this.allDocs('parts').length > 0) throw new HttpError(400, 'Demo data can only be loaded into an empty database.');
       const d = demoData();
-      for (const k of Object.keys(d.docs) as DocKind[]) for (const doc of d.docs[k] || []) this.upsertDoc(u, k, doc.id as string, doc, { quiet: true });
+      for (const k of Object.keys(d.docs) as DocKind[]) {
+        const byName = new Map(this.allDocs<{ id: string; name?: string }>(k).filter((x) => x.name).map((x) => [x.name!.toLowerCase(), x.id]));
+        for (const doc of d.docs[k] || []) {
+          // reuse built-in suppliers / machines with the same name instead of duplicating them
+          const existingId = typeof doc.name === 'string' ? byName.get(doc.name.toLowerCase()) : undefined;
+          this.upsertDoc(u, k, existingId || (doc.id as string), { ...doc, id: undefined }, { quiet: true });
+        }
+      }
       for (const mv of d.movements) {
         this.sql.exec(`INSERT INTO movements (id,part_id,part_name,delta,qty_after,kind,machine,note,user_id,user_name,unit_cost,at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
           uid(), mv.partId, mv.partName, mv.delta, mv.qtyAfter, mv.kind, mv.machine, null, null, mv.userName, mv.unitCost, mv.at);
@@ -955,18 +982,15 @@ export class Store extends DurableObject<Env> {
     for (const r of this.sql.exec(`SELECT id FROM images WHERE at<?`, now - 2 * DAY).toArray()) {
       if (!used.has(r.id as string)) this.sql.exec(`DELETE FROM images WHERE id=?`, r.id as string);
     }
-    // PM due check for hot knives and rollers
+    // Machine PMs due today or overdue
     const s = this.settings();
-    const due = this.allDocs<Equipment>('equipment').filter((e) => {
-      if (e.type !== 'roller' || e.status !== 'installed') return false; // hot knives have no PM interval
-      const start = Math.max(e.installedAt || 0, e.lastServiceAt || 0);
-      const pm = e.pmDays || s.rollerPmDays || 0;
-      return start && pm && now - start >= pm * DAY;
-    });
+    const logs = this.allDocs<PmLog>('pms');
+    const today = fmtDay(new Date(now));
+    const due = this.allDocs<Machine>('machines').filter((m) => m.pmTracked)
+      .map((m) => machinePmState(m, logs, today)).filter((x) => x.status === 'overdue' || x.status === 'today');
     if (due.length) {
-      const k = due.filter((e) => e.type === 'knife').length, r = due.length - k;
-      this.notify('warn', `PM due: ${[k && `${k} hot knife${k > 1 ? 'ves' : ''}`, r && `${r} roller${r > 1 ? 's' : ''}`].filter(Boolean).join(' and ')}`,
-        due.slice(0, 6).map((e) => `${e.tag}${e.machine ? ` @ ${e.machine}` : ''}`).join(', '), k ? '#/knives' : '#/rollers');
+      this.notify(due.some((x) => x.status === 'overdue') ? 'danger' : 'warn', `PM due: ${due.length} machine${due.length > 1 ? 's' : ''}`,
+        due.slice(0, 6).map((x) => `${x.machine} (${x.nextType}${x.status === 'overdue' ? `, ${-(x.daysLeft || 0)}d overdue` : ''})`).join(', '), '#/pms');
     }
     const parts = this.allDocs<Part>('parts');
     const out = parts.filter((p) => stockStatus(p) === 'out').length;
@@ -978,5 +1002,5 @@ export class Store extends DurableObject<Env> {
 }
 
 function singular(kind: string) {
-  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide' } as Record<string, string>)[kind] || kind;
+  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide', pms: 'PM' } as Record<string, string>)[kind] || kind;
 }

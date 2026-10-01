@@ -29,7 +29,7 @@ export interface State {
   clockSkew: number;
 }
 
-const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {} });
+const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {}, pms: {} });
 
 let state: State = {
   phase: 'boot', me: null, users: [], settings: DEFAULT_SETTINGS, docs: emptyDocs(), notifications: [], notifSeen: 0, activity: [],
@@ -223,7 +223,8 @@ export function applyAppearance(prefs: UserPrefs | null) {
   const p = { ...local, ...(prefs || {}) };
   safeSet('ppip.prefs', JSON.stringify(p));
   const root = document.documentElement;
-  const dark = p.theme === 'dark' || (p.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  // dark is the default
+  const dark = p.theme !== 'light' && (p.theme !== 'system' || matchMedia('(prefers-color-scheme: dark)').matches);
   root.dataset.theme = dark ? 'dark' : 'light';
   root.dataset.size = p.textSize || 'standard';
 }

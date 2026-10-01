@@ -86,15 +86,10 @@ export function EquipmentPage({ type, query }: { type: EquipmentType; query: URL
       </div>
 
       <div className="tiles" style={{ marginBottom: '1rem' }}>
-        {type === 'roller' ? <>
-        <button className={`tile ${counts.due ? 'danger' : 'ok'}`} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ pm: pmFilter === 'due' ? null : 'due' })}><span className="t-label">PM overdue</span><span className="t-value">{counts.due}</span><span className="t-sub">past change interval</span></button>
-        <button className={`tile ${counts.soon ? 'warn' : ''}`} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ pm: pmFilter === 'soon' ? null : 'soon' })}><span className="t-label">Due soon</span><span className="t-value">{counts.soon}</span><span className="t-sub">over 80% of interval</span></button>
-        </> : <>
-        <button className="tile warn" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'repair' })}><span className="t-label">In repair</span><span className="t-value">{counts.repair}</span><span className="t-sub">out for rebuild</span></button>
+                <button className="tile warn" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'repair' })}><span className="t-label">In repair</span><span className="t-value">{counts.repair}</span><span className="t-sub">out for rebuild</span></button>
         <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'retired' })}><span className="t-label">Retired</span><span className="t-value">{counts.retired}</span><span className="t-sub">scrapped</span></button>
-        </>}
         <button className="tile info" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'installed' })}><span className="t-label">On machines</span><span className="t-value">{counts.installed}</span><span className="t-sub">in service now</span></button>
-        <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'spare' })}><span className="t-label">Spares ready</span><span className="t-value">{counts.spare}</span><span className="t-sub">{type === 'roller' ? `${counts.repair} out for repair` : 'ready to install'}</span></button>
+        <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'spare' })}><span className="t-label">Spares ready</span><span className="t-value">{counts.spare}</span><span className="t-sub">ready to install</span></button>
       </div>
 
       <div className="row wrap" style={{ marginBottom: '1rem' }}>
@@ -163,7 +158,6 @@ function Actions({ e, canEdit, onAction, onEdit }: { e: Equipment; canEdit: bool
   return (
     <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
       {e.status === 'installed' ? <>
-        {e.type === 'roller' && <button className="btn sm" onClick={() => onAction('service')} title="Log a check / service (resets PM clock)"><Wrench size={17} />Serviced</button>}
         <button className="btn sm" onClick={() => onAction('remove')}><LogOut size={17} />Remove</button>
       </> : e.status !== 'retired' ? <button className="btn sm" onClick={() => onAction('install')}><LogIn size={17} />Install</button> : null}
       <Menu trigger={(t) => <button className="btn sm icon" onClick={t} aria-label="More"><MoreVertical size={18} /></button>}>
@@ -243,7 +237,6 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
         {canEdit && (
           <div className="btn-group">
             {e.status === 'installed' ? <>
-              {e.type === 'roller' && <button className="btn lg" onClick={() => onAction('service')}><Wrench />Serviced</button>}
               <button className="btn lg" onClick={() => onAction('move')}><ArrowRightLeft />Move</button>
               <button className="btn lg" onClick={() => onAction('remove')}><LogOut />Remove</button>
             </> : e.status !== 'retired' && <button className="btn primary lg" onClick={() => onAction('install')}><LogIn />Install on machine</button>}
@@ -262,7 +255,6 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
               <dt>Size</dt><dd>{[e.diameter && `Ø ${e.diameter}"`, e.length && `${e.length}" long`].filter(Boolean).join(' × ') || '—'}</dd>
               <dt>Covering</dt><dd>{e.covering || '—'}</dd>
             </>}
-            {e.type === 'roller' && <><dt>PM interval</dt><dd>{pm.interval ? `${pm.interval} days${e.pmDays ? '' : ' (default)'}` : 'Not set'}</dd></>}
           </dl>
           {e.notes && <><hr className="divider" /><div style={{ whiteSpace: 'pre-wrap' }}>{e.notes}</div></>}
         </div>
@@ -336,15 +328,14 @@ function EquipmentForm({ type, item, onClose }: { type: EquipmentType; item?: Eq
   const [installDate, setInstallDate] = useState(item?.installedAt ? new Date(item.installedAt).toISOString().slice(0, 10) : todayISO());
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof Equipment>(k: K, v: Equipment[K] | null | undefined) => setD((x) => ({ ...x, [k]: v ?? undefined }));
-  const defaultPm = settings.rollerPmDays;
-  const dupTag = d.tag && Object.values(all).some((x) => x.id !== item?.id && x.type === type && x.tag.toLowerCase() === d.tag!.trim().toLowerCase());
+    const dupTag = d.tag && Object.values(all).some((x) => x.id !== item?.id && x.type === type && x.tag.toLowerCase() === d.tag!.trim().toLowerCase());
 
   const save = async () => {
     if (!d.tag?.trim()) { toast('Enter a tag / ID', 'danger'); return; }
     if (d.status === 'installed' && !d.machine) { toast('Choose the machine it is on', 'danger'); return; }
     setBusy(true);
     try {
-      const patch: Partial<Equipment> = { ...d, type, ...(type === 'knife' ? { position: '', pmDays: undefined } : {}) };
+      const patch: Partial<Equipment> = { ...d, type, pmDays: undefined, ...(type === 'knife' ? { position: '' } : {}) };
       if (d.status === 'installed') patch.installedAt = new Date(installDate + 'T12:00:00').getTime();
       else { patch.machine = ''; patch.position = ''; patch.installedAt = null; }
       await saveDoc('equipment', item?.id || newId(), patch, `Save ${d.tag}`);
@@ -378,7 +369,6 @@ function EquipmentForm({ type, item, onClose }: { type: EquipmentType; item?: Eq
             <Field label="Face length (in)"><NumberInput value={d.length} onChange={(v) => set('length', v)} /></Field>
             <Field label="Covering / material"><Combobox value={d.covering || ''} onChange={(v) => set('covering', v)} options={['Silicone', 'EPDM', 'Urethane', 'Nitrile', 'Neoprene', 'Steel chrome', 'Aluminum', 'Rubber']} placeholder="e.g. Silicone 60A" /></Field>
           </>}
-          {type === 'roller' && <Field label="PM / change interval (days)" hint={`Leave blank to use the default (${defaultPm || 'none'} days)`}><NumberInput value={d.pmDays} onChange={(v) => set('pmDays', v)} min={0} placeholder={String(defaultPm || '')} /></Field>}
         </div>
         {dupTag && <div className="banner warn" style={{ marginTop: '1rem' }}>Another {type === 'knife' ? 'knife' : 'roller'} already uses this tag.</div>}
         <div className="form-section">
