@@ -1,6 +1,6 @@
 import { DEFAULT_WEEKLY_DAYS } from '../../../shared/pm';
 import { startTour } from '../components/Tour';
-import { ShoppingCart, GraduationCap, Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck, Smartphone, Search, Flame, Printer, Wifi, Usb } from 'lucide-react';
+import { IdCard, Menu, ShoppingCart, GraduationCap, Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck, Smartphone, Search, Flame, Printer, Wifi, Usb } from 'lucide-react';
 
 export function HelpPage() {
   const Item = ({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) => (
@@ -41,6 +41,8 @@ export function HelpPage() {
       <div className="card">
         <div className="card-head"><h3>Good to know</h3></div>
         <div className="list">
+          <Item icon={<IdCard />} title="Sign in with your badge">At the sign-in screen just scan your employee badge — no clicking. First time: sign in with your name and password, then click <b>Add my badge</b> (top of the screen) and scan it once.</Item>
+          <Item icon={<Menu />} title="Can't find a page?">Less-used pages (reports, analytics, suppliers, labels, import/export) are under <b>More tools</b> in the menu.</Item>
           <Item icon={<Wifi />} title="Live updates">The green “Live” dot means you're connected. If the internet drops, keep working — changes are saved on your computer and sync when it's back.</Item>
           <Item icon={<Usb />} title="Running from a USB stick">Open <b>Start PPIP</b> on the stick. It uses the same data as the website.</Item>
           <Item icon={<Smartphone />} title="On your phone">Open the website and choose “Add to Home Screen” — it then works like an app.</Item>

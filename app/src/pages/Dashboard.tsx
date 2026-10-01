@@ -54,10 +54,8 @@ export function Dashboard() {
       </div>
 
       <div className="tiles" data-tour="tiles">
-        <a className="tile info" href="#/parts"><span className="t-label"><Package size={18} />Active parts</span><span className="t-value">{d.active}</span><span className="t-sub">in the database</span></a>
         <a className={`tile ${d.out.length ? 'danger' : 'ok'}`} href="#/parts?status=reorder"><span className="t-label"><XCircle size={18} />Out / order now</span><span className="t-value">{d.out.length}</span><span className="t-sub">{d.out.length ? 'need ordering now' : 'nothing out — nice'}</span></a>
         <a className={`tile ${d.low.length ? 'warn' : 'ok'}`} href="#/parts?status=low"><span className="t-label"><AlertTriangle size={18} />Running low</span><span className="t-value">{d.low.length}</span><span className="t-sub">at or below reorder point</span></a>
-        <a className="tile" href="#/analytics"><span className="t-label"><DollarSign size={18} />Inventory value</span><span className="t-value" style={{ fontSize: '1.6rem' }}>{money(d.value, 0)}</span><span className="t-sub">parts on the shelf</span></a>
         <a className={`tile ${pmStates.some((x) => x.status === 'overdue') ? 'danger' : pmDue ? 'warn' : 'ok'}`} href="#/pms"><span className="t-label"><Wrench size={18} />PMs due</span><span className="t-value">{pmDue}</span><span className="t-sub">{pmStates.filter((x) => x.daysLeft != null && x.daysLeft > 0 && x.daysLeft <= 7).length} more this week</span></a>
         <a className="tile" href="#/orders"><span className="t-label"><ClipboardList size={18} />Open orders</span><span className="t-value">{d.openOrders.length}</span><span className="t-sub">order guides in progress</span></a>
       </div>
@@ -118,18 +116,6 @@ export function Dashboard() {
               ))}
             </div>
           )}
-        </div>
-
-        <div className="card">
-          <div className="card-head"><h3>Quick links</h3></div>
-          <div className="card-body grid-2">
-            <a className="btn lg" href="#/reports"><FileText />Weekly report</a>
-            <a className="btn lg" href="#/analytics"><ActivityIcon />Analytics</a>
-            <a className="btn lg" href="#/knives"><Flame />Hot knives</a>
-            <a className="btn lg" href="#/rollers"><CircleDot />Rollers</a>
-            <a className="btn lg" href="#/labels"><Package />Print labels</a>
-            <a className="btn lg" href="#/help">How to use</a>
-          </div>
         </div>
       </div>
       {receive && <StockDialog part={receive} mode="receive" onClose={() => setReceive(null)} />}

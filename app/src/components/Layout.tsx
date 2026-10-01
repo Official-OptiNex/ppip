@@ -1,32 +1,39 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   LayoutDashboard, Package, ClipboardList, Flame, CircleDot, BarChart3, FileText, Truck, Tag, ArrowLeftRight, History, ShieldCheck,
-  HelpCircle, ShoppingCart, Wrench, Sun, Moon, Bell, Menu as MenuIcon, LogOut, UserCircle2, Search, Plus, X, Wifi, WifiOff, AlertTriangle, XCircle, CheckCircle2, Info, MoreHorizontal,
+  HelpCircle, ChevronDown, ShoppingCart, Wrench, Sun, Moon, Bell, Menu as MenuIcon, LogOut, UserCircle2, Search, Plus, X, Wifi, WifiOff, AlertTriangle, XCircle, CheckCircle2, Info, MoreHorizontal,
 } from 'lucide-react';
 import { useStore, logout, markNotificationsSeen, can } from '../lib/store';
-import { stockStatus, matches, avatarColor, initials, timeAgo, navigate } from '../lib/util';
+import { stockStatus, matches, avatarColor, initials, timeAgo, navigate, useNow } from '../lib/util';
 import { usePmStates, pmDueCount } from '../lib/pmhooks';
 import { savePrefs } from '../lib/store';
-import { isFileMode } from '../lib/api';
+import { isFileMode, safeGet, safeSet } from '../lib/api';
 import { Thumb } from './ui';
 import { QuickLogBubble } from './QuickLog';
+import { BadgeNotice } from './BadgeSetup';
 import type { Part, Equipment, OrderGuide } from '../../../shared/types';
 
-const NAV: { to: string; label: string; icon: ReactNode; admin?: boolean; group?: string }[] = [
-  { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={21} /> },
-  { to: '/parts', label: 'Parts', icon: <Package size={21} /> },
-  { to: '/orders', label: 'Order Guides', icon: <ClipboardList size={21} /> },
-  { to: '/pms', label: 'PMs', icon: <Wrench size={21} />, group: 'Maintenance' },
-  { to: '/knives', label: 'Hot Knives', icon: <Flame size={21} /> },
-  { to: '/rollers', label: 'Rollers', icon: <CircleDot size={21} /> },
-  { to: '/analytics', label: 'Analytics', icon: <BarChart3 size={21} />, group: 'Insights' },
+type NavItem = { to: string; label: string; icon: ReactNode; admin?: boolean };
+// Everyday pages are always shown; the rest sit under "More tools" (opens automatically when you're on one).
+const NAV_MAIN: NavItem[] = [
+  { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={22} /> },
+  { to: '/parts', label: 'Parts', icon: <Package size={22} /> },
+  { to: '/orders', label: 'Order Guides', icon: <ClipboardList size={22} /> },
+  { to: '/pms', label: 'PMs', icon: <Wrench size={22} /> },
+  { to: '/knives', label: 'Hot Knives', icon: <Flame size={22} /> },
+  { to: '/rollers', label: 'Rollers', icon: <CircleDot size={22} /> },
+];
+const NAV_MORE: NavItem[] = [
   { to: '/reports', label: 'Weekly Report', icon: <FileText size={21} /> },
+  { to: '/analytics', label: 'Analytics', icon: <BarChart3 size={21} /> },
   { to: '/activity', label: 'Activity Log', icon: <History size={21} /> },
-  { to: '/suppliers', label: 'Suppliers & Lists', icon: <Truck size={21} />, group: 'Manage' },
+  { to: '/suppliers', label: 'Suppliers & Lists', icon: <Truck size={21} /> },
   { to: '/labels', label: 'Print Labels', icon: <Tag size={21} /> },
   { to: '/data', label: 'Import / Export', icon: <ArrowLeftRight size={21} /> },
-  { to: '/admin', label: 'Admin', icon: <ShieldCheck size={21} />, admin: true },
+];
+const NAV_FOOT: NavItem[] = [
   { to: '/help', label: 'Help', icon: <HelpCircle size={21} /> },
+  { to: '/admin', label: 'Admin', icon: <ShieldCheck size={21} />, admin: true },
 ];
 
 export function isActive(to: string, path: string) {
@@ -47,8 +54,20 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
     return { low, out };
   }, [parts]);
   useEffect(() => setNavOpen(false), [path]);
+  const inMore = NAV_MORE.some((n) => isActive(n.to, path));
+  const [moreOpen, setMoreOpen] = useState(() => inMore || safeGet('ppip.navMore') === '1');
+  useEffect(() => { if (inMore) setMoreOpen(true); }, [inMore]);
+  useEffect(() => { safeSet('ppip.navMore', moreOpen ? '1' : '0'); }, [moreOpen]);
+  const navLink = (n: NavItem) => {
+    const badge = n.to === '/parts' ? (counts.out ? <span className="count danger" title="Out of stock or order now">{counts.out}</span> : counts.low ? <span className="count warn" title="Running low">{counts.low}</span> : null)
+      : n.to === '/pms' && pmDue ? <span className={`count ${pmOverdue ? 'danger' : 'warn'}`} title="PMs due">{pmDue}</span> : null;
+    return (
+      <a key={n.to} href={`#${n.to}`} className={isActive(n.to, path) ? 'active' : ''} aria-current={isActive(n.to, path) ? 'page' : undefined}>
+        {n.icon}<span>{n.label}</span>{badge}
+      </a>
+    );
+  };
 
-  let lastGroup: string | undefined;
   return (
     <div className="shell">
       {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
@@ -62,17 +81,13 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
           <button className="btn icon ghost mobile-only" onClick={() => setNavOpen(false)} aria-label="Close menu"><X /></button>
         </div>
         <nav className="nav" data-tour="nav">
-          {NAV.filter((n) => !n.admin || me?.role === 'admin').map((n) => {
-            const header = n.group && n.group !== lastGroup ? <div className="nav-label" key={`g-${n.group}`}>{n.group}</div> : null;
-            if (n.group) lastGroup = n.group;
-            const badge = n.to === '/parts' ? (counts.out ? <span className="count danger" title="Out of stock or order now">{counts.out}</span> : counts.low ? <span className="count warn" title="Running low">{counts.low}</span> : null)
-              : n.to === '/pms' && pmDue ? <span className={`count ${pmOverdue ? 'danger' : 'warn'}`} title="PMs due">{pmDue}</span> : null;
-            return [header, (
-              <a key={n.to} href={`#${n.to}`} className={isActive(n.to, path) ? 'active' : ''} aria-current={isActive(n.to, path) ? 'page' : undefined}>
-                {n.icon}<span>{n.label}</span>{badge}
-              </a>
-            )];
-          })}
+          {NAV_MAIN.map((n) => navLink(n))}
+          <button className={`nav-more ${moreOpen ? 'open' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-expanded={moreOpen}>
+            <MoreHorizontal size={21} /><span>More tools</span><ChevronDown size={18} className="chev" />
+          </button>
+          {moreOpen && <div className="nav-sub">{NAV_MORE.map((n) => navLink(n))}</div>}
+          <div className="nav-sep" />
+          {NAV_FOOT.filter((n) => !n.admin || me?.role === 'admin').map((n) => navLink(n))}
         </nav>
         <div className="sidebar-foot">
           <a className="btn block ghost" href="#/profile" style={{ justifyContent: 'flex-start' }}>
@@ -87,13 +102,14 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
           <button className="btn icon ghost mobile-only" onClick={() => setNavOpen(true)} aria-label="Open menu"><MenuIcon /></button>
           <GlobalSearch />
           <div className="row" style={{ gap: '0.5rem' }}>
+            <Clock />
             <ConnectionPill />
             <Presence />
             <ThemeToggle />
             <Notifications />
-            {can.edit() && <button className="btn primary desktop-only" onClick={() => navigate('/parts/new')}><Plus size={20} />Add part</button>}
           </div>
         </header>
+        <BadgeNotice />
         <main className="content" id="main">{children}</main>
       </div>
 
@@ -105,6 +121,20 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
         <a href="#/pms" className={isActive('/pms', path) ? 'active' : ''}><Wrench size={22} />PMs</a>
         <button onClick={() => setNavOpen(true)}><MoreHorizontal size={22} />More</button>
       </nav>
+    </div>
+  );
+}
+
+/** Local time and date in the top bar (updates on its own). */
+function Clock() {
+  const now = useNow(5000);
+  const d = new Date(now);
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const date = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  return (
+    <div className="clock" title={d.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })} aria-label={`${date}, ${time}`}>
+      <span className="c-time">{time}</span>
+      <span className="c-date">{date}</span>
     </div>
   );
 }

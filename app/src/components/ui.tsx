@@ -128,8 +128,9 @@ export function Combobox({ value, onChange, options, placeholder, onPick, render
   const listId = useId();
   const filtered = useMemo(() => {
     const q = value.toLowerCase().trim();
-    const exact = options.some((o) => o.toLowerCase() === q);
-    const list = !q || exact ? options : options.filter((o) => o.toLowerCase().includes(q));
+    // once the box exactly matches a choice, hide the list so it doesn't cover the next field (clear the box to see all again)
+    if (q && options.some((o) => o.toLowerCase() === q)) return [];
+    const list = !q ? options : options.filter((o) => o.toLowerCase().includes(q));
     return list.slice(0, 60);
   }, [value, options]);
   const pick = (v: string) => { onChange(v); onPick?.(v); setOpen(false); };
@@ -221,9 +222,15 @@ export function Seg<T extends string>({ value, onChange, options }: { value: T; 
 
 export function Menu({ trigger, children }: { trigger: (toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [alignLeft, setAlignLeft] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
+    // open toward whichever side has room (a menu near the left edge of a panel would otherwise be cut off)
+    const r = ref.current?.getBoundingClientRect();
+    const panel = ref.current?.closest('.drawer, .modal')?.getBoundingClientRect();
+    const leftLimit = Math.max(8, panel?.left ?? 0);
+    setAlignLeft(!!r && r.right - 240 < leftLimit);
     const on = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', on);
@@ -233,7 +240,7 @@ export function Menu({ trigger, children }: { trigger: (toggle: () => void) => R
   return (
     <div className="pop-anchor" ref={ref} onClick={(e) => e.stopPropagation()}>
       {trigger(() => setOpen((o) => !o))}
-      {open && <div className="menu">{children(() => setOpen(false))}</div>}
+      {open && <div className="menu" style={alignLeft ? { left: 0, right: 'auto' } : undefined}>{children(() => setOpen(false))}</div>}
     </div>
   );
 }

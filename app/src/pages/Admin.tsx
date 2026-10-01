@@ -9,21 +9,23 @@ import { saveDoc, setState, toast, toastError, useIsAdmin, useStore, loadBootstr
 import { bytes, fmtDateTime, navigate, timeAgo, download } from '../lib/util';
 import { Field, Modal, NumberInput, Tabs, confirmDialog, Spinner, Seg } from '../components/ui';
 import { OrderSheet } from './Orders';
+import { MechanicsTab } from './Mechanics';
 import { startTour } from '../components/Tour';
 import { GraduationCap, Play } from 'lucide-react';
 
-type Tab = 'users' | 'system' | 'backups' | 'settings' | 'print';
+type Tab = 'users' | 'mechanics' | 'system' | 'backups' | 'settings' | 'print';
 
 export function AdminPage({ tab: t }: { tab?: string }) {
   const isAdmin = useIsAdmin();
-  const tab = (isAdmin ? (['users', 'system', 'backups', 'settings', 'print'].includes(t || '') ? t : 'users') : 'print') as Tab;
+  const tab = (isAdmin ? (['users', 'mechanics', 'system', 'backups', 'settings', 'print'].includes(t || '') ? t : 'users') : 'print') as Tab;
   return (
     <div>
       <div className="page-head"><div><h1>{isAdmin ? 'Admin' : 'Print layout'}</h1><div className="sub">{isAdmin ? 'Accounts, storage, backups and app settings.' : 'Change how printed order guides look.'}</div></div></div>
       {isAdmin && <Tabs value={tab} onChange={(v) => navigate(`/admin/${v}`, true)} tabs={[
-        { id: 'users', label: 'Users' }, { id: 'system', label: 'Storage & usage' }, { id: 'backups', label: 'Backups' }, { id: 'settings', label: 'Settings' }, { id: 'print', label: 'Print layout' },
+        { id: 'users', label: 'Users' }, { id: 'mechanics', label: 'Mechanics & shifts' }, { id: 'system', label: 'Storage & usage' }, { id: 'backups', label: 'Backups' }, { id: 'settings', label: 'Settings' }, { id: 'print', label: 'Print layout' },
       ]} />}
       {tab === 'users' && <UsersTab />}
+      {tab === 'mechanics' && <MechanicsTab />}
       {tab === 'system' && <SystemTab />}
       {tab === 'backups' && <BackupsTab />}
       {tab === 'settings' && <SettingsTab />}
@@ -88,12 +90,13 @@ function UsersTab() {
       </div>
       <div className="table-wrap">
         <table className="tbl">
-          <thead><tr><th>Name</th><th>Email</th><th>Access</th><th>Last sign-in</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Badge</th><th>Access</th><th>Last sign-in</th><th>Status</th><th /></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id} className={u.active ? '' : 'st-retired'}>
                 <td><b>{u.name}</b>{u.id === me?.id && <span className="muted"> (you)</span>}{online.some((o) => o.id === u.id) && <span className="pill ok" style={{ marginLeft: 8 }}>online</span>}</td>
                 <td>{u.email}</td>
+                <td className="mono">{u.badge || <span className="muted" style={{ fontFamily: 'var(--font)' }}>—</span>}</td>
                 <td><span className={`pill ${ROLE_INFO[u.role].cls}`}>{ROLE_INFO[u.role].icon}{ROLE_INFO[u.role].label}</span></td>
                 <td>{u.lastLogin ? timeAgo(u.lastLogin) : 'Never'}</td>
                 <td>{u.active ? 'Active' : 'Deactivated'}</td>
@@ -124,7 +127,7 @@ function genPassword() {
 
 function UserForm({ user, onClose, onSaved }: { user: Partial<PublicUser>; onClose: () => void; onSaved: () => void }) {
   const isNew = !user.id;
-  const [d, setD] = useState({ name: user.name || '', email: user.email || '', role: (user.role || 'editor') as Role, password: isNew ? genPassword() : '' });
+  const [d, setD] = useState({ name: user.name || '', email: user.email || '', role: (user.role || 'editor') as Role, password: isNew ? genPassword() : '', badge: user.badge || '' });
   const [showPw, setShowPw] = useState(isNew);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ name: string; email: string; password: string } | null>(null);
@@ -132,7 +135,7 @@ function UserForm({ user, onClose, onSaved }: { user: Partial<PublicUser>; onClo
     setBusy(true);
     try {
       if (isNew) await api('/admin/users', { body: d });
-      else await api(`/admin/users/${user.id}`, { method: 'PATCH', body: { name: d.name, email: d.email, role: d.role, ...(d.password ? { password: d.password } : {}) } });
+      else await api(`/admin/users/${user.id}`, { method: 'PATCH', body: { name: d.name, email: d.email, role: d.role, badge: d.badge || null, ...(d.password ? { password: d.password } : {}) } });
       onSaved();
       if (d.password) setDone({ name: d.name, email: d.email, password: d.password }); else { toast('Saved'); onClose(); }
     } catch (e) { toastError(e); } finally { setBusy(false); }
@@ -155,6 +158,10 @@ function UserForm({ user, onClose, onSaved }: { user: Partial<PublicUser>; onClo
         <div className="grid-2">
           <Field label="Name" required hint="Can be used to sign in — must be unique"><input className="input" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus /></Field>
           <Field label="Email" required><input className="input" type="email" value={d.email} onChange={(e) => setD({ ...d, email: e.target.value })} /></Field>
+          <Field label="Badge number (optional)" hint="Click here and scan their badge, or type it (2–8 digits). Lets them sign in with one scan." className="span-2">
+            <input className="input mono" value={d.badge} inputMode="numeric" autoComplete="off" placeholder="Scan or type" onChange={(e) => setD({ ...d, badge: e.target.value.replace(/\D/g, '').slice(0, 8) })}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); /* scanners press Enter — don't submit the form */ }} />
+          </Field>
         </div>
         <Field label="Access level">
           <div className="col" style={{ gap: '0.5rem' }}>
@@ -410,8 +417,8 @@ function SettingsTab() {
   const save = async () => {
     setBusy(true);
     try {
-      const { companyName, department, weeklyReportDay, currency, publicUrl } = d;
-      await saveDoc('settings', 'app', { companyName, department, weeklyReportDay, currency, publicUrl });
+      const { companyName, department, weeklyReportDay, currency, publicUrl, badgeLogin } = d;
+      await saveDoc('settings', 'app', { companyName, department, weeklyReportDay, currency, publicUrl, badgeLogin: badgeLogin !== false });
       toast('Settings saved');
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
@@ -429,6 +436,10 @@ function SettingsTab() {
         <Field label="Website address" className="span-2" hint="Used in QR codes on labels and phone-photo links (important when running from USB). Leave blank to detect automatically.">
           <input className="input" value={d.publicUrl || ''} onChange={(e) => set('publicUrl', e.target.value)} placeholder={serverUrl() || location.origin} />
         </Field>
+        <div className="span-2">
+          <label className="check"><input type="checkbox" checked={d.badgeLogin !== false} onChange={(e) => set('badgeLogin', e.target.checked)} />Allow badge sign-in (scan an employee badge to sign in — no password)</label>
+          <div className="small muted">Anyone holding a linked badge can sign in to that account, so keep this on only for computers in the plant. Badge numbers are set under Users.</div>
+        </div>
       </div>
       <p className="muted">Categories, locations and units are edited under <a href="#/suppliers/lists">Suppliers & Lists → Dropdown lists</a>.</p>
       <div><button className="btn primary lg" onClick={save} disabled={busy}><Save />Save settings</button></div>

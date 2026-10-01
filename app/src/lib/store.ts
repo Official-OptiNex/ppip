@@ -29,7 +29,7 @@ export interface State {
   clockSkew: number;
 }
 
-const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {}, pms: {} });
+const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {}, pms: {}, mechanics: {} });
 
 let state: State = {
   phase: 'boot', me: null, users: [], settings: DEFAULT_SETTINGS, docs: emptyDocs(), notifications: [], notifSeen: 0, activity: [],
@@ -202,8 +202,9 @@ export async function loadBootstrap() {
   applyAppearance(b.me?.prefs || null);
 }
 
-export async function login(loginName: string, password: string) {
-  const res = await api<{ token: string }>('/login', { body: { login: loginName, password, device: navigator.userAgent }, auth: false });
+export async function login(loginName: string, password: string, badge?: string) {
+  const body = badge != null ? { badge, device: navigator.userAgent } : { login: loginName, password, device: navigator.userAgent };
+  const res = await api<{ token: string }>('/login', { body, auth: false });
   setToken(res.token);
   await loadBootstrap();
   connect();

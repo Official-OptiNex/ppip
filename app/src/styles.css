@@ -533,3 +533,34 @@ button.list-item { width: 100%; border-left: 0; border-right: 0; border-top: 0; 
 .tbl tr.st-order td:first-child { box-shadow: inset 5px 0 0 var(--danger); }
 .tbl tr.st-order.clickable:hover td { background: var(--danger-bg); }
 .part-card.st-order { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 45%, var(--surface)); }
+
+/* Badge sign-in */
+.login-card { width: 100%; max-width: 460px; }
+.badge-card { border: 2px solid color-mix(in srgb, var(--primary) 45%, var(--border)); }
+.badge-icon { width: 4rem; height: 4rem; border-radius: 16px; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; flex: none; }
+.ready-pulse { animation: readyPulse 1.6s ease-in-out infinite; }
+@keyframes readyPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 50% { box-shadow: 0 0 0 6px transparent; } }
+.or-divider { display: flex; align-items: center; gap: 0.8rem; color: var(--muted); font-weight: 600; font-size: 0.9rem; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; border-top: 1px solid var(--border); }
+.notice-bar { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; padding: 0.7rem 1.5rem; background: var(--info-bg); color: var(--text); border-bottom: 1px solid color-mix(in srgb, var(--info) 30%, transparent); }
+.notice-bar .grow { min-width: 220px; }
+@media (max-width: 960px) { .notice-bar { padding: 0.7rem 1rem; } }
+
+/* Collapsible "More tools" in the menu */
+.nav-more { display: flex; align-items: center; gap: 0.75rem; min-height: 2.75rem; padding: 0 0.75rem; border-radius: 10px; border: 0; background: none; color: var(--muted); font-weight: 650; cursor: pointer; width: 100%; margin-top: 0.4rem; }
+.nav-more:hover { background: var(--surface-3); color: var(--text); }
+.nav-more .chev { margin-left: auto; transition: transform 0.15s; }
+.nav-more.open .chev { transform: rotate(180deg); }
+.nav-sub { display: flex; flex-direction: column; gap: 2px; padding-left: 0.6rem; border-left: 2px solid var(--border); margin-left: 1.1rem; }
+.nav-sep { border-top: 1px solid var(--border); margin: 0.6rem 0.4rem; }
+.nav > a { min-height: 3rem; font-size: 1.04rem; }
+
+/* Long button labels wrap instead of pushing the page sideways on phones */
+@media (max-width: 700px) {
+  .col > .btn, .btn.block, .card-body > .btn { white-space: normal; text-align: center; height: auto; padding-top: 0.55rem; padding-bottom: 0.55rem; }
+}
+/* Header clock */
+.clock { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; padding: 0 0.4rem; white-space: nowrap; }
+.clock .c-time { font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.clock .c-date { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+@media (max-width: 960px) { .clock .c-date { display: none; } .clock .c-time { font-size: 1rem; } }
