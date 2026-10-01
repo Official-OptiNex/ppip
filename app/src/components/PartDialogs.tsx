@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Save, Wand2, ExternalLink, AlertTriangle, Minus, Plus, PackageMinus, PackagePlus, ClipboardCheck, Info } from 'lucide-react';
-import { buildOrderUrl, type Part } from '../../../shared/types';
+import { buildOrderUrl, orderNowLevel, type Part } from '../../../shared/types';
 import { adjustStock, getState, newId, saveDoc, toast, toastError, useStore } from '../lib/store';
 import { stockStatus, uniqueSorted, navigate } from '../lib/util';
 import { Combobox, Field, Modal, NumberInput, StatusPill, TagInput } from './ui';
@@ -83,7 +83,7 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
     } catch (e) { toastError(e); } finally { setSaving(false); }
   };
 
-  const st = stockStatus({ qty: d.qty ?? 0, minQty: d.minQty, decommissioned: d.decommissioned });
+  const st = stockStatus({ qty: d.qty ?? 0, minQty: d.minQty, orderQty: d.orderQty, decommissioned: d.decommissioned });
   return (
     <Modal title={isNew ? 'Add a part' : `Edit part`} onClose={onClose} size="wide"
       footer={<>
@@ -127,6 +127,9 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
             </Field>
             <Field label="Reorder at (low)" hint="At or below this = orange">
               <NumberInput value={d.minQty} onChange={(v) => set('minQty', v)} min={0} placeholder="e.g. 2" />
+            </Field>
+            <Field label="Order now at (red)" hint={d.orderQty == null ? (orderNowLevel({ minQty: d.minQty }) != null ? `Blank = half the reorder point (${orderNowLevel({ minQty: d.minQty })})` : 'At or below this = red “Order now”') : 'At or below this = red “Order now”'}>
+              <NumberInput value={d.orderQty} onChange={(v) => set('orderQty', v)} min={0} placeholder={orderNowLevel({ minQty: d.minQty }) != null ? `auto: ${orderNowLevel({ minQty: d.minQty })}` : 'e.g. 1'} />
             </Field>
             <Field label="Stock up to (target)" hint="Used to suggest order qty">
               <NumberInput value={d.maxQty} onChange={(v) => set('maxQty', v)} min={0} placeholder="e.g. 6" />
@@ -203,7 +206,7 @@ export function StockDialog({ part, mode: initialMode, onClose }: { part: Part; 
   const n = qty ?? 0;
   const after = mode === 'use' ? live.qty - n : mode === 'receive' ? live.qty + n : n;
   const invalid = qty == null || n < 0 || (mode !== 'set' && n <= 0) || after < 0;
-  const afterStatus = stockStatus({ qty: after, minQty: live.minQty, decommissioned: live.decommissioned });
+  const afterStatus = stockStatus({ qty: after, minQty: live.minQty, orderQty: live.orderQty, decommissioned: live.decommissioned });
   const unit = live.unit || 'ea';
 
   const submit = async () => {
@@ -211,7 +214,7 @@ export function StockDialog({ part, mode: initialMode, onClose }: { part: Part; 
     setBusy(true);
     try {
       await adjustStock(live, mode, n, mode === 'use' ? machine : undefined, note);
-      toast(mode === 'use' ? `Took ${n} ${unit} — ${after} left` : mode === 'receive' ? `Received ${n} ${unit} — now ${after}` : `Count saved — ${after} ${unit}`, afterStatus === 'out' ? 'danger' : afterStatus === 'low' ? 'warn' : 'success', live.name);
+      toast(mode === 'use' ? `Took ${n} ${unit} — ${after} left` : mode === 'receive' ? `Received ${n} ${unit} — now ${after}` : `Count saved — ${after} ${unit}`, afterStatus === 'out' || afterStatus === 'order' ? 'danger' : afterStatus === 'low' ? 'warn' : 'success', live.name);
       onClose();
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };

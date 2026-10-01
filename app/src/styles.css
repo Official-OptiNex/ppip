@@ -146,7 +146,7 @@ p { margin: 0 0 0.6em; }
   padding: 0 1.5rem; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
-.content { padding: 1.5rem; max-width: 1500px; width: 100%; margin: 0 auto; }
+.content { padding: 1.5rem 1.5rem 7rem; max-width: 1500px; width: 100%; margin: 0 auto; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
 .page-head .sub { color: var(--muted); margin-top: 0.3rem; }
 
@@ -351,8 +351,8 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
 @keyframes slide { from { transform: translateX(40px); opacity: 0; } }
 
 /* ---------------- Toasts ---------------- */
-.toasts { position: fixed; z-index: 200; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: 0.6rem; max-width: min(420px, calc(100vw - 2rem)); }
-@media (max-width: 960px) { .toasts { bottom: 4.6rem; left: 1rem; right: 1rem; max-width: none; } }
+.toasts { position: fixed; z-index: 200; right: 1rem; bottom: 6.5rem; display: flex; flex-direction: column; gap: 0.6rem; max-width: min(420px, calc(100vw - 2rem)); }
+@media (max-width: 960px) { .toasts { bottom: 9.5rem; left: 1rem; right: 1rem; max-width: none; } }
 .toast { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.85rem 1rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); border-left: 5px solid var(--primary); animation: pop 0.15s; }
 .toast.success { border-left-color: var(--ok); } .toast.warn { border-left-color: var(--warn); } .toast.danger { border-left-color: var(--danger); }
 .toast .t-title { font-weight: 700; }
@@ -471,3 +471,65 @@ button.list-item { width: 100%; border-left: 0; border-right: 0; border-top: 0; 
 @media (max-width: 1600px) { .hide-md { display: none !important; } }
 .tbl td .mono, .tbl td b.mono { white-space: nowrap; }
 @media (max-width: 700px) { .chips.scroll { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; margin: 0 -1rem; padding-left: 1rem; padding-right: 1rem; } .chips.scroll > * { flex: none; } .grid-3.keep { grid-template-columns: repeat(3, 1fr); } .grid-3.keep .btn { padding: 0 0.4rem; } }
+
+/* Floating quick-log bubble (bottom-right, every page) */
+.fab {
+  position: fixed; z-index: 45; right: 1.5rem; bottom: 1.5rem; display: inline-flex; align-items: center; gap: 0.55rem;
+  height: 4rem; min-width: 4rem; padding: 0 1.4rem 0 1.2rem; border-radius: 999px; border: 0; cursor: pointer;
+  background: var(--primary); color: var(--primary-text); font-weight: 750; font-size: 1.05rem;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--primary) 45%, transparent), var(--shadow-lg); transition: transform 0.12s, background 0.12s;
+}
+.fab:hover { background: var(--primary-hover); transform: translateY(-2px); }
+.fab:active { transform: translateY(0); }
+@media (max-width: 960px) {
+  .fab { right: 1rem; bottom: calc(4.6rem + env(safe-area-inset-bottom)); height: 3.6rem; min-width: 3.6rem; padding: 0; justify-content: center; }
+  .fab-label { display: none; }
+}
+
+/* ---------------- 4"×6" thermal labels (Zebra GK420d etc.) ---------------- */
+.zlabel { width: 4in; height: 6in; background: #fff; color: #000; position: relative; overflow: hidden; break-after: page; page-break-after: always; font-family: Arial, "Helvetica Neue", sans-serif; }
+.zl-inner { position: absolute; inset: 0; padding: 0.22in; display: flex; flex-direction: column; gap: 0.06in; }
+.zl-top { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid #000; padding-bottom: 0.05in; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.3em; }
+.zl-name { font-weight: 900; line-height: 1.08; max-height: 3.3em; overflow: hidden; overflow-wrap: anywhere; }
+.zl-pn { font-family: "Consolas", "Courier New", monospace; font-weight: 700; font-size: 20pt; line-height: 1.1; overflow-wrap: anywhere; }
+.zl-mfr { font-size: 13pt; font-weight: 700; }
+.zl-qr { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.zl-qr img { width: 2.45in; height: 2.45in; image-rendering: pixelated; }
+.zl-scan { font-size: 8pt; font-weight: 700; letter-spacing: 0.08em; margin-top: 0.04in; }
+.zl-row { display: flex; gap: 0.08in; }
+.zl-box { flex: 1; border: 3px solid #000; border-radius: 6px; padding: 0.05in 0.08in; display: flex; flex-direction: column; min-width: 0; }
+.zl-box span { font-size: 8pt; font-weight: 700; letter-spacing: 0.06em; }
+.zl-box b { font-size: 17pt; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }
+.zl-grow { flex: 1; }
+/* landscape: a 6"×4" design printed sideways on the same 4"×6" stock */
+.zl-inner.land { width: 6in; height: 4in; flex-direction: row; gap: 0.2in; inset: auto; top: 0; left: 0; transform-origin: top left; transform: translateX(4in) rotate(90deg); }
+.zl-inner.land .zl-qr { flex: none; width: 2.7in; }
+.zl-inner.land .zl-qr img { width: 2.6in; height: 2.6in; }
+.zl-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.05in; }
+/* on-screen preview: shrink, and show the wide label the right way round */
+.zpreview { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+.zpreview .zlabel { zoom: 0.62; border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); }
+.zpreview .zlabel.is-land { width: 6in; height: 4in; }
+.zpreview .zl-inner.land { transform: none; }
+@media print { .zlabel { border: 0 !important; } }
+
+/* ---------------- Guided tour ---------------- */
+.tour-root { position: fixed; inset: 0; z-index: 400; }
+.tour-block { position: fixed; inset: 0; z-index: 400; }
+.tour-dim { position: fixed; inset: 0; background: rgba(5, 10, 18, 0.62); z-index: 401; }
+.tour-spot { position: fixed; z-index: 401; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(5, 10, 18, 0.62), 0 0 0 3px var(--primary); transition: all 0.2s ease; pointer-events: none; }
+.tour-card { position: fixed; z-index: 402; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 1rem 1.2rem 1.1rem; animation: pop 0.16s ease-out; max-height: calc(100vh - 24px); overflow-y: auto; }
+.tour-dots { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 0.9rem; }
+.tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+.tour-dots i.done { background: color-mix(in srgb, var(--primary) 45%, var(--border-strong)); }
+.tour-dots i.on { background: var(--primary); width: 22px; border-radius: 99px; }
+
+/* "Order now" stock level (red, between running low and out) */
+.dot.order { background: var(--danger); }
+.pill.order { background: var(--danger); color: #fff; border-color: var(--danger); }
+.qty-big.order { color: var(--danger); }
+.filter-chip.order.on { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.tbl tr.st-order td { background: color-mix(in srgb, var(--danger-bg) 55%, var(--surface)); }
+.tbl tr.st-order td:first-child { box-shadow: inset 5px 0 0 var(--danger); }
+.tbl tr.st-order.clickable:hover td { background: var(--danger-bg); }
+.part-card.st-order { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 45%, var(--surface)); }

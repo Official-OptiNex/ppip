@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Printer, Download, PackageMinus, PackagePlus, DollarSign, XCircle, AlertTriangle, Flame } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Printer, Download, PackageMinus, PackagePlus, DollarSign, XCircle, AlertTriangle, Flame, Wrench } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { useStore } from '../lib/store';
-import { DAY, fmtDate, fmtDateTime, money, num, setQuery, stockStatus, download, toCSV, pmState, fmtDuration } from '../lib/util';
+import { DAY, fmtDate, fmtDateTime, money, num, setQuery, stockStatus, download, toCSV } from '../lib/util';
+import { fmtDay, parseDay } from '../../../shared/pm';
+import { usePmStates } from '../lib/pmhooks';
 import { Spinner, Seg } from '../components/ui';
 
 interface Row { partId: string; partName: string; qty: number; times: number; cost: number; machines?: string | null }
@@ -25,7 +27,8 @@ const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 export function ReportsPage({ query }: { query: URLSearchParams }) {
   const settings = useStore((s) => s.settings);
   const parts = useStore((s) => s.docs.parts);
-  const equipment = useStore((s) => s.docs.equipment);
+  const pms = useStore((s) => s.docs.pms);
+  const pmStates = usePmStates();
   const lastMove = useStore((s) => s.lastMovementAt);
   const period = (query.get('period') || 'week') as 'week' | 'month';
   const weekStartDay = settings.weeklyReportDay ?? 1;
@@ -52,12 +55,14 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
   const now = useMemo(() => {
     const list = Object.values(parts);
     return {
-      out: list.filter((p) => stockStatus(p) === 'out').sort((a, b) => a.name.localeCompare(b.name)),
+      out: list.filter((p) => stockStatus(p) === 'out' || stockStatus(p) === 'order').sort((a, b) => a.name.localeCompare(b.name)),
       low: list.filter((p) => stockStatus(p) === 'low').sort((a, b) => a.name.localeCompare(b.name)),
-      pm: Object.values(equipment).map((e) => ({ e, pm: pmState(e, settings) })).filter((x) => x.pm.state === 'due'),
     };
-  }, [parts, equipment, settings]);
+  }, [parts]);
 
+  const fromDay = fmtDay(start), toDay = fmtDay(new Date(end.getTime() - DAY));
+  const pmsDone = Object.values(pms).filter((l) => l.date >= fromDay && l.date <= toDay).sort((a, b) => b.date.localeCompare(a.date));
+  const pmLate = isCurrentPeriod(start, end) ? pmStates.filter((x) => x.status === 'overdue') : [];
   const usedTotal = rep?.used.reduce((s, r) => s + r.cost, 0) || 0;
   const recvTotal = rep?.received.reduce((s, r) => s + r.cost, 0) || 0;
   const title = period === 'week' ? `Week of ${fmtDate(start.getTime())} – ${fmtDate(end.getTime() - DAY)}` : start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -118,19 +123,30 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
         </Section>
 
         <div className="grid-cards">
-          <Section title={<><XCircle size={18} color="var(--danger)" style={{ verticalAlign: -3 }} /> Out of stock right now</>} empty="Nothing is out of stock.">
-            {now.out.length > 0 && <table className="tbl"><tbody>{now.out.map((p) => <tr key={p.id} className="st-out"><td><b>{p.name}</b><div className="small muted">{[p.partNumber, p.vendor].filter(Boolean).join(' · ')}</div></td></tr>)}</tbody></table>}
+          <Section title={<><XCircle size={18} color="var(--danger)" style={{ verticalAlign: -3 }} /> Out of stock / order now</>} empty="Nothing is out of stock.">
+            {now.out.length > 0 && <table className="tbl"><tbody>{now.out.map((p) => <tr key={p.id} className={`st-${stockStatus(p)}`}><td><b>{p.name}</b> <span className="muted">({p.qty} left)</span><div className="small muted">{[p.partNumber, p.vendor].filter(Boolean).join(' · ')}</div></td></tr>)}</tbody></table>}
           </Section>
           <Section title={<><AlertTriangle size={18} color="var(--warn)" style={{ verticalAlign: -3 }} /> Running low right now</>} empty="Nothing is running low.">
             {now.low.length > 0 && <table className="tbl"><tbody>{now.low.map((p) => <tr key={p.id} className="st-low"><td><b>{p.name}</b><div className="small muted">{p.partNumber}</div></td><td className="num"><b>{p.qty}</b> / {p.minQty}</td></tr>)}</tbody></table>}
           </Section>
         </div>
 
+        <Section title={<><Wrench size={18} style={{ verticalAlign: -3 }} /> Machine PMs</>} empty="No PMs logged in this period.">
+          {(pmsDone.length > 0 || pmLate.length > 0) && (
+            <table className="tbl">
+              <thead><tr><th>Date</th><th>Machine</th><th>Type</th><th>Done by</th><th>Notes</th></tr></thead>
+              <tbody>
+                {pmLate.map((st) => <tr key={'late' + st.machine} className="st-out"><td colSpan={5}><b>Overdue now:</b> {st.machine} — {st.nextType} PM was due {st.nextDue ? parseDay(st.nextDue).toLocaleDateString() : ''}</td></tr>)}
+                {pmsDone.map((l) => <tr key={l.id}><td className="nowrap">{parseDay(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</td><td>{l.machine}</td><td>{l.type === 'monthly' ? 'Monthly' : 'Weekly'}</td><td>{l.doneBy || '—'}</td><td className="small">{l.notes}</td></tr>)}
+              </tbody>
+            </table>
+          )}
+        </Section>
+
         <Section title={<><Flame size={18} style={{ verticalAlign: -3 }} /> Hot knife & roller changes</>} empty="No knife or roller changes logged.">
-          {(rep.equipment.length > 0 || now.pm.length > 0) && (
+          {rep.equipment.length > 0 && (
             <table className="tbl">
               <tbody>
-                {now.pm.map(({ e, pm }) => <tr key={e.id} className="st-out"><td colSpan={2}><b>PM overdue:</b> {e.tag} on {e.machine} — {fmtDuration(pm.days)} (interval {pm.interval} d)</td></tr>)}
                 {rep.equipment.map((a) => <tr key={a.id}><td>{a.summary}</td><td className="small muted nowrap">{fmtDateTime(a.at)} · {a.userName}</td></tr>)}
               </tbody>
             </table>
@@ -164,3 +180,5 @@ function Section({ title, empty, children }: { title: React.ReactNode; empty: st
     </div>
   );
 }
+
+function isCurrentPeriod(start: Date, end: Date) { const n = Date.now(); return n >= start.getTime() && n < end.getTime(); }

@@ -16,6 +16,7 @@ const PART_FIELDS: { key: string; label: string; aliases: string[]; type?: 'num'
   { key: 'description', label: 'Details', aliases: ['details', 'notes/description', 'spec', 'specs', 'size'] },
   { key: 'qty', label: 'Qty in stock', aliases: ['qty', 'quantity', 'on hand', 'stock', 'count', 'in stock', 'qty on hand', 'amount'], type: 'num' },
   { key: 'minQty', label: 'Reorder at (min)', aliases: ['min', 'min qty', 'minimum', 'reorder point', 'reorder at', 'reorder', 'low'], type: 'num' },
+  { key: 'orderQty', label: 'Order now at (red)', aliases: ['order now', 'order now at', 'order at', 'critical level', 'critical qty'], type: 'num' },
   { key: 'maxQty', label: 'Stock up to (max)', aliases: ['max', 'max qty', 'maximum', 'target', 'par'], type: 'num' },
   { key: 'unit', label: 'Unit', aliases: ['unit', 'uom', 'units'] },
   { key: 'unitCost', label: 'Unit cost', aliases: ['cost', 'unit cost', 'price', 'unit price', 'each'], type: 'num' },
@@ -40,7 +41,7 @@ export function DataPage() {
   const partRows = () => Object.values(parts).sort((a, b) => a.name.localeCompare(b.name)).map((p) => ({
     ...p, machines: (p.machines || []).join('; '), status: STATUS_LABEL[stockStatus(p)], critical: p.critical ? 'yes' : '', decommissioned: p.decommissioned ? 'yes' : '',
   }));
-  const cols = ['name', 'partNumber', 'manufacturer', 'category', 'location', 'description', 'qty', 'minQty', 'maxQty', 'unit', 'status', 'unitCost', 'vendor', 'vendorPartNumber', 'leadTimeDays', 'orderUrl', 'machines', 'critical', 'decommissioned', 'notes', 'id'];
+  const cols = ['name', 'partNumber', 'manufacturer', 'category', 'location', 'description', 'qty', 'minQty', 'orderQty', 'maxQty', 'unit', 'status', 'unitCost', 'vendor', 'vendorPartNumber', 'leadTimeDays', 'orderUrl', 'machines', 'critical', 'decommissioned', 'notes', 'id'];
   const excelCols = cols.map((k) => ({ key: k, label: PART_FIELDS.find((f) => f.key === k)?.label.replace(' *', '') || (k === 'status' ? 'Status' : k === 'id' ? 'ID (keep for re-import)' : k), width: k === 'name' ? 40 : k === 'orderUrl' ? 50 : 16 }));
 
   const exportParts = async (fmt: 'csv' | 'xlsx') => {

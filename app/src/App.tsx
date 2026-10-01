@@ -3,6 +3,7 @@ import { useStore } from './lib/store';
 import { useRoute, setCurrency } from './lib/util';
 import { Layout } from './components/Layout';
 import { ConfirmHost, Toasts, Spinner } from './components/ui';
+import { TourHost } from './components/Tour';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { PartsPage } from './pages/Parts';
@@ -10,6 +11,7 @@ import { MobileUpload } from './pages/MobileUpload';
 
 const Orders = lazy(() => import('./pages/Orders').then((m) => ({ default: m.OrdersPage })));
 const OrderPrint = lazy(() => import('./pages/Orders').then((m) => ({ default: m.OrderPrintPage })));
+const Pms = lazy(() => import('./pages/Pms').then((m) => ({ default: m.PmsPage })));
 const Equipment = lazy(() => import('./pages/Equipment').then((m) => ({ default: m.EquipmentPage })));
 const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.AnalyticsPage })));
 const Reports = lazy(() => import('./pages/Reports').then((m) => ({ default: m.ReportsPage })));
@@ -43,6 +45,7 @@ export function App() {
     case undefined: page = <Dashboard />; break;
     case 'parts': page = <PartsPage openId={b} query={route.query} />; break;
     case 'orders': page = <Orders id={b} query={route.query} />; break;
+    case 'pms': page = <Pms tab={b} query={route.query} />; break;
     case 'knives': page = <Equipment key="knife" type="knife" query={route.query} />; break;
     case 'rollers': page = <Equipment key="roller" type="roller" query={route.query} />; break;
     case 'analytics': page = <Analytics />; break;
@@ -63,6 +66,7 @@ export function App() {
       </Layout>
       <Toasts />
       <ConfirmHost />
+      <TourHost />
     </>
   );
 }

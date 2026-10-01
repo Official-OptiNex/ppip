@@ -18,8 +18,8 @@ export function describe(e: Equipment) {
   }
   const cons = e.construction === 'segmented' ? 'Segmented' : e.construction === 'solid' ? 'Solid' : '';
   const kind = e.rollerType ? `${e.rollerType[0].toUpperCase()}${e.rollerType.slice(1)} roller` : 'Roller';
-  const size = [e.diameter && `Ø${e.diameter}"`, e.length && `${e.length}" long`].filter(Boolean).join(' × ');
-  return [cons, kind, size, e.covering].filter(Boolean).join(' · ');
+  const size = [e.diameter && `${e.diameter}" OD`, e.length && `${e.length}" long`].filter(Boolean).join(' × ');
+  return [cons, kind, size].filter(Boolean).join(' · ');
 }
 
 export function EquipmentPage({ type, query }: { type: EquipmentType; query: URLSearchParams }) {
@@ -85,11 +85,11 @@ export function EquipmentPage({ type, query }: { type: EquipmentType; query: URL
         </div>
       </div>
 
-      <div className="tiles" style={{ marginBottom: '1rem' }}>
-        <button className={`tile ${counts.due ? 'danger' : 'ok'}`} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ pm: pmFilter === 'due' ? null : 'due' })}><span className="t-label">PM overdue</span><span className="t-value">{counts.due}</span><span className="t-sub">past change interval</span></button>
-        <button className={`tile ${counts.soon ? 'warn' : ''}`} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ pm: pmFilter === 'soon' ? null : 'soon' })}><span className="t-label">Due soon</span><span className="t-value">{counts.soon}</span><span className="t-sub">over 80% of interval</span></button>
+      <div className="tiles" style={{ marginBottom: '1rem' }} data-tour="eq-add">
+                <button className="tile warn" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'repair' })}><span className="t-label">In repair</span><span className="t-value">{counts.repair}</span><span className="t-sub">out for rebuild</span></button>
+        <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'retired' })}><span className="t-label">Retired</span><span className="t-value">{counts.retired}</span><span className="t-sub">scrapped</span></button>
         <button className="tile info" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'installed' })}><span className="t-label">On machines</span><span className="t-value">{counts.installed}</span><span className="t-sub">in service now</span></button>
-        <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'spare' })}><span className="t-label">Spares ready</span><span className="t-value">{counts.spare}</span><span className="t-sub">{counts.repair} out for repair</span></button>
+        <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'spare' })}><span className="t-label">Spares ready</span><span className="t-value">{counts.spare}</span><span className="t-sub">ready to install</span></button>
       </div>
 
       <div className="row wrap" style={{ marginBottom: '1rem' }}>
@@ -153,12 +153,18 @@ function PmBar({ pm }: { pm: ReturnType<typeof pmState> }) {
 }
 
 type ActionKind = 'install' | 'move' | 'remove' | 'service' | 'retire' | 'spare';
+
+/** Permanently delete a knife / roller (asks first). Returns true when deleted. */
+async function deleteForever(e: Equipment) {
+  const what = e.type === 'knife' ? 'hot knife' : 'roller';
+  if (!(await confirmDialog({ title: `Permanently delete ${what} ${e.tag}?`, body: <>It is removed completely and can't be brought back from this screen (only from a backup). Its history stays in the activity log.<br /><br />To keep it on record instead, use <b>Retire / scrap</b>.</>, confirm: 'Delete permanently', danger: true }))) return false;
+  try { await deleteDoc('equipment', e.id); toast(`${e.tag} deleted`); return true; } catch (err) { toastError(err); return false; }
+}
 function Actions({ e, canEdit, onAction, onEdit }: { e: Equipment; canEdit: boolean; onAction: (k: ActionKind) => void; onEdit: () => void }) {
   if (!canEdit) return null;
   return (
     <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
       {e.status === 'installed' ? <>
-        <button className="btn sm" onClick={() => onAction('service')} title="Log a check / service (resets PM clock)"><Wrench size={17} />Serviced</button>
         <button className="btn sm" onClick={() => onAction('remove')}><LogOut size={17} />Remove</button>
       </> : e.status !== 'retired' ? <button className="btn sm" onClick={() => onAction('install')}><LogIn size={17} />Install</button> : null}
       <Menu trigger={(t) => <button className="btn sm icon" onClick={t} aria-label="More"><MoreVertical size={18} /></button>}>
@@ -167,6 +173,8 @@ function Actions({ e, canEdit, onAction, onEdit }: { e: Equipment; canEdit: bool
           {e.status === 'repair' && <button onClick={() => { close(); onAction('spare'); }}><CheckCircle2 size={18} />Back from repair (spare)</button>}
           <button onClick={() => { close(); onEdit(); }}><Pencil size={18} />Edit details</button>
           {e.status !== 'retired' && <button onClick={() => { close(); onAction('retire'); }}><Archive size={18} />Retire / scrap</button>}
+          <hr />
+          <button className="danger" onClick={() => { close(); deleteForever(e); }}><Trash2 size={18} />Delete permanently</button>
         </>}
       </Menu>
     </div>
@@ -215,10 +223,7 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
     api<Activity[]>(`/activity?refId=${encodeURIComponent(e.id)}&limit=200`).then((r) => { if (alive) setHist(r); }).catch(() => { if (alive) setHist([]); });
     return () => { alive = false; };
   }, [e.id, e.updatedAt]);
-  const remove = async () => {
-    if (!(await confirmDialog({ title: `Delete ${e.tag}?`, body: 'This removes it completely, including its history. To keep history, use “Retire” instead.', confirm: 'Delete', danger: true }))) return;
-    try { await deleteDoc('equipment', e.id); toast('Deleted'); onClose(); } catch (err) { toastError(err); }
-  };
+  const remove = async () => { if (await deleteForever(e)) onClose(); };
   return (
     <Drawer onClose={onClose} head={<div className="row"><span className={`pill ${STATUS_CLS[e.status]}`}>{STATUS_LABEL[e.status]}</span>{pm.state === 'due' && <span className="pill danger">PM due</span>}{pm.state === 'soon' && <span className="pill warn">PM soon</span>}</div>}>
       <div className="stack">
@@ -238,12 +243,13 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
         {canEdit && (
           <div className="btn-group">
             {e.status === 'installed' ? <>
-              <button className="btn lg" onClick={() => onAction('service')}><Wrench />Serviced</button>
               <button className="btn lg" onClick={() => onAction('move')}><ArrowRightLeft />Move</button>
               <button className="btn lg" onClick={() => onAction('remove')}><LogOut />Remove</button>
             </> : e.status !== 'retired' && <button className="btn primary lg" onClick={() => onAction('install')}><LogIn />Install on machine</button>}
             {e.status === 'repair' && <button className="btn lg" onClick={() => onAction('spare')}><CheckCircle2 />Back from repair</button>}
             <button className="btn lg" onClick={onEdit}><Pencil />Edit</button>
+            {e.status !== 'retired' && <button className="btn lg" onClick={() => onAction('retire')}><Archive />Retire</button>}
+            <button className="btn lg danger-ghost" onClick={remove}><Trash2 />Delete</button>
           </div>
         )}
         <div className="card card-pad">
@@ -254,10 +260,9 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
             </> : <>
               <dt>Construction</dt><dd style={{ textTransform: 'capitalize' }}>{e.construction || '—'}</dd>
               <dt>Roller type</dt><dd style={{ textTransform: 'capitalize' }}>{e.rollerType || '—'}</dd>
-              <dt>Size</dt><dd>{[e.diameter && `Ø ${e.diameter}"`, e.length && `${e.length}" long`].filter(Boolean).join(' × ') || '—'}</dd>
-              <dt>Covering</dt><dd>{e.covering || '—'}</dd>
+              <dt>Outer diameter</dt><dd>{e.diameter ? `${e.diameter}"` : '—'}</dd>
+              <dt>Roller length</dt><dd>{e.length ? `${e.length}"` : '—'}</dd>
             </>}
-            <dt>PM interval</dt><dd>{pm.interval ? `${pm.interval} days${e.pmDays ? '' : ' (default)'}` : 'Not set'}</dd>
           </dl>
           {e.notes && <><hr className="divider" /><div style={{ whiteSpace: 'pre-wrap' }}>{e.notes}</div></>}
         </div>
@@ -269,7 +274,6 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
             )}
           </div>
         </div>
-        {canEdit && <button className="btn danger-ghost" onClick={remove}><Trash2 size={18} />Delete</button>}
       </div>
     </Drawer>
   );
@@ -295,7 +299,7 @@ function ActionDialog({ e, kind, onClose }: { e: Equipment; kind: ActionKind; on
     setBusy(true);
     try {
       const at = new Date(date + 'T' + new Date().toTimeString().slice(0, 8)).getTime();
-      const res = await api<Equipment>(`/equipment/${e.id}/action`, { body: { action: kind, machine, position, note, to, at: date === todayISO() ? Date.now() : at } });
+      const res = await api<Equipment>(`/equipment/${e.id}/action`, { body: { action: kind, machine, position: e.type === 'knife' ? '' : position, note, to, at: date === todayISO() ? Date.now() : at } });
       applyUpsert('equipment', res);
       toast(titles[kind].replace(/^\w+/, (w) => ({ Install: 'Installed', Move: 'Moved', Remove: 'Removed', Log: 'Logged', Retire: 'Retired' } as Record<string, string>)[w] || w));
       onClose();
@@ -307,7 +311,7 @@ function ActionDialog({ e, kind, onClose }: { e: Equipment; kind: ActionKind; on
         <div className="muted">{describe(e)}{e.machine ? ` · currently on ${e.machine}` : ''}</div>
         {needsMachine && <>
           <Field label="Machine" required><Combobox value={machine} onChange={setMachine} options={machines} placeholder="e.g. Bag Machine 2" autoFocus /></Field>
-          <Field label="Position (optional)" hint="Front / rear, upper / lower, station #…"><input className="input" value={position} onChange={(ev) => setPosition(ev.target.value)} /></Field>
+          {e.type === 'roller' && <Field label="Position (optional)" hint="Front / rear, upper / lower, station #…"><input className="input" value={position} onChange={(ev) => setPosition(ev.target.value)} /></Field>}
           {occupying.length > 0 && <div className="banner warn">Already on {machine}: {occupying.map((x) => `${x.tag}${x.position ? ` (${x.position})` : ''}`).join(', ')}. Remove it first if this {one} replaces it.</div>}
         </>}
         {kind === 'remove' && (
@@ -331,15 +335,14 @@ function EquipmentForm({ type, item, onClose }: { type: EquipmentType; item?: Eq
   const [installDate, setInstallDate] = useState(item?.installedAt ? new Date(item.installedAt).toISOString().slice(0, 10) : todayISO());
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof Equipment>(k: K, v: Equipment[K] | null | undefined) => setD((x) => ({ ...x, [k]: v ?? undefined }));
-  const defaultPm = type === 'knife' ? settings.knifePmDays : settings.rollerPmDays;
-  const dupTag = d.tag && Object.values(all).some((x) => x.id !== item?.id && x.type === type && x.tag.toLowerCase() === d.tag!.trim().toLowerCase());
+    const dupTag = d.tag && Object.values(all).some((x) => x.id !== item?.id && x.type === type && x.tag.toLowerCase() === d.tag!.trim().toLowerCase());
 
   const save = async () => {
     if (!d.tag?.trim()) { toast('Enter a tag / ID', 'danger'); return; }
     if (d.status === 'installed' && !d.machine) { toast('Choose the machine it is on', 'danger'); return; }
     setBusy(true);
     try {
-      const patch: Partial<Equipment> = { ...d, type };
+      const patch: Partial<Equipment> = { ...d, type, pmDays: undefined, ...(type === 'knife' ? { position: '' } : {}) };
       if (d.status === 'installed') patch.installedAt = new Date(installDate + 'T12:00:00').getTime();
       else { patch.machine = ''; patch.position = ''; patch.installedAt = null; }
       await saveDoc('equipment', item?.id || newId(), patch, `Save ${d.tag}`);
@@ -369,11 +372,9 @@ function EquipmentForm({ type, item, onClose }: { type: EquipmentType; item?: Eq
                 <option value="nip">Nip roller</option><option value="draw">Draw roller</option><option value="idler">Idler</option><option value="other">Other</option>
               </select>
             </Field>
-            <Field label="Diameter (in)"><NumberInput value={d.diameter} onChange={(v) => set('diameter', v)} /></Field>
-            <Field label="Face length (in)"><NumberInput value={d.length} onChange={(v) => set('length', v)} /></Field>
-            <Field label="Covering / material"><Combobox value={d.covering || ''} onChange={(v) => set('covering', v)} options={['Silicone', 'EPDM', 'Urethane', 'Nitrile', 'Neoprene', 'Steel chrome', 'Aluminum', 'Rubber']} placeholder="e.g. Silicone 60A" /></Field>
+            <Field label="Outer diameter (in, optional)"><NumberInput value={d.diameter} onChange={(v) => set('diameter', v)} min={0} placeholder='e.g. 4.5' /></Field>
+            <Field label="Roller length (in)"><NumberInput value={d.length} onChange={(v) => set('length', v)} min={0} placeholder='e.g. 36' /></Field>
           </>}
-          <Field label="PM / change interval (days)" hint={`Leave blank to use the default (${defaultPm || 'none'} days)`}><NumberInput value={d.pmDays} onChange={(v) => set('pmDays', v)} min={0} placeholder={String(defaultPm || '')} /></Field>
         </div>
         {dupTag && <div className="banner warn" style={{ marginTop: '1rem' }}>Another {type === 'knife' ? 'knife' : 'roller'} already uses this tag.</div>}
         <div className="form-section">
@@ -382,7 +383,7 @@ function EquipmentForm({ type, item, onClose }: { type: EquipmentType; item?: Eq
           {d.status === 'installed' && (
             <div className="grid-form" style={{ marginTop: '1rem' }}>
               <Field label="Machine" required><Combobox value={d.machine || ''} onChange={(v) => set('machine', v)} options={machines} placeholder="e.g. Bag Machine 1" /></Field>
-              <Field label="Position"><input className="input" value={d.position || ''} onChange={(e) => set('position', e.target.value)} placeholder="Front / rear / station" /></Field>
+              {type === 'roller' && <Field label="Position"><input className="input" value={d.position || ''} onChange={(e) => set('position', e.target.value)} placeholder="Front / rear / station" /></Field>}
               <Field label="Installed on" hint="Used to count days on machine"><input className="input" type="date" value={installDate} max={todayISO()} onChange={(e) => setInstallDate(e.target.value)} /></Field>
             </div>
           )}

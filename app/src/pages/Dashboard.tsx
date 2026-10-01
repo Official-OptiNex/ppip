@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Package, XCircle, AlertTriangle, DollarSign, Flame, CircleDot, ClipboardList, Plus, FileText, ShoppingCart, Activity as ActivityIcon, PackagePlus, ArrowRight } from 'lucide-react';
+import { Package, XCircle, AlertTriangle, DollarSign, Flame, CircleDot, Wrench, ClipboardList, Plus, FileText, ShoppingCart, Activity as ActivityIcon, PackagePlus, ArrowRight } from 'lucide-react';
 import { useCanEdit, useStore } from '../lib/store';
-import { stockStatus, money, partValue, pmState, timeAgo, navigate, fmtDuration, reorderQty } from '../lib/util';
+import { stockStatus, money, partValue, timeAgo, navigate, reorderQty } from '../lib/util';
+import { usePmStates, pmDueCount } from '../lib/pmhooks';
+import { parseDay } from '../../../shared/pm';
+
+const PM_CLS = { overdue: 'danger', today: 'warn', soon: 'warn', ok: 'ok', never: 'warn' } as const;
 import { Thumb, Empty } from '../components/ui';
 import { StockDialog } from '../components/PartDialogs';
 import type { Part } from '../../../shared/types';
@@ -15,20 +19,18 @@ export function Dashboard() {
   const activity = useStore((s) => s.activity);
   const canEdit = useCanEdit();
   const [receive, setReceive] = useState<Part | null>(null);
+  const pmStates = usePmStates();
+  const pmDue = pmDueCount(pmStates);
 
   const d = useMemo(() => {
     const list = Object.values(parts);
     const active = list.filter((p) => !p.decommissioned);
-    const out = active.filter((p) => stockStatus(p) === 'out').sort((a, b) => Number(!!b.critical) - Number(!!a.critical) || a.name.localeCompare(b.name));
+    const out = active.filter((p) => stockStatus(p) === 'out' || stockStatus(p) === 'order').sort((a, b) => Number(stockStatus(a) === 'order') - Number(stockStatus(b) === 'order') || Number(!!b.critical) - Number(!!a.critical) || a.name.localeCompare(b.name));
     const low = active.filter((p) => stockStatus(p) === 'low').sort((a, b) => Number(!!b.critical) - Number(!!a.critical) || a.qty - b.qty);
     const value = active.reduce((s, p) => s + partValue(p), 0);
-    const eq = Object.values(equipment).map((e) => ({ e, pm: pmState(e, settings) }));
-    const due = eq.filter((x) => x.pm.state === 'due' || x.pm.state === 'soon').sort((a, b) => b.pm.pct - a.pm.pct);
     const openOrders = Object.values(orders).filter((o) => !['received', 'cancelled'].includes(o.status));
     return {
-      active: active.length, out, low, value, due, openOrders,
-      knivesOn: eq.filter((x) => x.e.type === 'knife' && x.e.status === 'installed').length,
-      rollersOn: eq.filter((x) => x.e.type === 'roller' && x.e.status === 'installed').length,
+      active: active.length, out, low, value, openOrders,
     };
   }, [parts, equipment, orders, settings]);
 
@@ -51,12 +53,12 @@ export function Dashboard() {
         )}
       </div>
 
-      <div className="tiles">
+      <div className="tiles" data-tour="tiles">
         <a className="tile info" href="#/parts"><span className="t-label"><Package size={18} />Active parts</span><span className="t-value">{d.active}</span><span className="t-sub">in the database</span></a>
-        <a className={`tile ${d.out.length ? 'danger' : 'ok'}`} href="#/parts?status=out"><span className="t-label"><XCircle size={18} />Out of stock</span><span className="t-value">{d.out.length}</span><span className="t-sub">{d.out.length ? 'need ordering now' : 'nothing out — nice'}</span></a>
+        <a className={`tile ${d.out.length ? 'danger' : 'ok'}`} href="#/parts?status=reorder"><span className="t-label"><XCircle size={18} />Out / order now</span><span className="t-value">{d.out.length}</span><span className="t-sub">{d.out.length ? 'need ordering now' : 'nothing out — nice'}</span></a>
         <a className={`tile ${d.low.length ? 'warn' : 'ok'}`} href="#/parts?status=low"><span className="t-label"><AlertTriangle size={18} />Running low</span><span className="t-value">{d.low.length}</span><span className="t-sub">at or below reorder point</span></a>
         <a className="tile" href="#/analytics"><span className="t-label"><DollarSign size={18} />Inventory value</span><span className="t-value" style={{ fontSize: '1.6rem' }}>{money(d.value, 0)}</span><span className="t-sub">parts on the shelf</span></a>
-        <a className={`tile ${d.due.some((x) => x.pm.state === 'due') ? 'warn' : ''}`} href="#/knives"><span className="t-label"><Flame size={18} />Knives / rollers</span><span className="t-value">{d.knivesOn} / {d.rollersOn}</span><span className="t-sub">{d.due.filter((x) => x.pm.state === 'due').length} PM due · {d.due.filter((x) => x.pm.state === 'soon').length} due soon</span></a>
+        <a className={`tile ${pmStates.some((x) => x.status === 'overdue') ? 'danger' : pmDue ? 'warn' : 'ok'}`} href="#/pms"><span className="t-label"><Wrench size={18} />PMs due</span><span className="t-value">{pmDue}</span><span className="t-sub">{pmStates.filter((x) => x.daysLeft != null && x.daysLeft > 0 && x.daysLeft <= 7).length} more this week</span></a>
         <a className="tile" href="#/orders"><span className="t-label"><ClipboardList size={18} />Open orders</span><span className="t-value">{d.openOrders.length}</span><span className="t-sub">order guides in progress</span></a>
       </div>
 
@@ -75,7 +77,7 @@ export function Dashboard() {
                     <div className="ellipsis" style={{ fontWeight: 700 }}>{p.name}</div>
                     <div className="small muted ellipsis">{[p.partNumber, p.location].filter(Boolean).join(' · ')} · suggest order {reorderQty(p)}</div>
                   </div>
-                  <span className={`pill ${stockStatus(p)}`}>{stockStatus(p) === 'out' ? 'Out' : 'Low'} · {p.qty}</span>
+                  <span className={`pill ${stockStatus(p)}`}>{stockStatus(p) === 'out' ? 'Out' : stockStatus(p) === 'order' ? 'Order now' : 'Low'} · {p.qty}</span>
                   {canEdit && <button className="btn sm icon" title="Receive" onClick={(e) => { e.stopPropagation(); setReceive(p); }}><PackagePlus size={18} /></button>}
                 </div>
               ))}
@@ -85,17 +87,17 @@ export function Dashboard() {
         </div>
 
         <div className="card">
-          <div className="card-head"><h3>Knife & roller PM</h3><a className="btn sm" href="#/knives">Open</a></div>
-          {d.due.length === 0 ? <Empty icon={<Flame size={40} />} title="Nothing due">All installed knives and rollers are within their PM interval.</Empty> : (
+          <div className="card-head"><h3>Machine PMs</h3><a className="btn sm" href="#/pms">Open</a></div>
+          {pmStates.length === 0 ? <Empty icon={<Wrench size={40} />} title="No PMs set up">Turn on PM tracking for machines on the <a href="#/pms/setup">PMs page</a>.</Empty> : (
             <div className="list">
-              {d.due.slice(0, 8).map(({ e, pm }) => (
-                <a key={e.id} className="list-item" href={`#/${e.type === 'knife' ? 'knives' : 'rollers'}?open=${e.id}`}>
-                  <span className={`li-icon ${pm.state === 'due' ? 'danger' : 'warn'}`}>{e.type === 'knife' ? <Flame size={18} /> : <CircleDot size={18} />}</span>
+              {pmStates.slice(0, 8).map((st) => (
+                <a key={st.machine} className="list-item" href={canEdit ? `#/pms?log=${encodeURIComponent(st.machine)}` : '#/pms'} style={{ alignItems: 'center' }}>
+                  <span className={`li-icon ${PM_CLS[st.status]}`}><Wrench size={18} /></span>
                   <div className="grow">
-                    <b>{e.tag}</b> <span className="muted">on {e.machine}{e.position ? ` · ${e.position}` : ''}</span>
-                    <div className="small muted">{fmtDuration(pm.days)} on machine · PM every {pm.interval} days</div>
+                    <b>{st.machine}</b>
+                    <div className="small muted">{st.status === 'never' ? 'No PM logged yet' : `${st.nextType === 'monthly' ? 'Monthly' : 'Weekly'} PM due ${parseDay(st.nextDue!).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`}</div>
                   </div>
-                  <span className={`pill ${pm.state === 'due' ? 'danger' : 'warn'}`}>{pm.state === 'due' ? 'Due' : 'Soon'}</span>
+                  <span className={`pill ${PM_CLS[st.status]}`}>{st.status === 'never' ? 'Due now' : st.status === 'overdue' ? `${-(st.daysLeft || 0)}d overdue` : st.status === 'today' ? 'Today' : `${st.daysLeft}d`}</span>
                 </a>
               ))}
             </div>

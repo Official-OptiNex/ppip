@@ -18,6 +18,7 @@ export interface UserPrefs {
   theme?: 'light' | 'dark' | 'system';
   textSize?: 'standard' | 'large' | 'xlarge';
   desktopAlerts?: boolean;
+  tutorialDone?: boolean; // first-login walkthrough finished or skipped
 }
 
 export interface BaseDoc {
@@ -36,6 +37,7 @@ export interface Part extends BaseDoc {
   description?: string;
   qty: number;
   minQty?: number; // at or below = LOW (orange)
+  orderQty?: number; // at or below = ORDER NOW (red); blank = half of minQty
   maxQty?: number; // target stock level when re-ordering
   unit?: string;
   unitCost?: number;
@@ -74,6 +76,19 @@ export interface Machine extends BaseDoc {
   name: string;
   area?: string;
   notes?: string;
+  pmTracked?: boolean; // shows on the PMs page
+  pmWeeklyDays?: number; // next PM due this many days after the last PM of any type (default 7)
+  pmMonthlyMonths?: number; // a monthly PM is required every N months (default 1)
+}
+
+export type PmType = 'weekly' | 'monthly';
+export interface PmLog extends BaseDoc {
+  machine: string;
+  date: string; // YYYY-MM-DD the PM was done
+  type: PmType;
+  doneBy?: string;
+  nextDue?: string; // YYYY-MM-DD; filled in automatically, can be changed
+  notes?: string;
 }
 
 export type EquipmentType = 'knife' | 'roller';
@@ -84,10 +99,10 @@ export interface Equipment extends BaseDoc {
   tag: string; // ID / serial written on the knife or roller
   status: EquipmentStatus;
   machine?: string;
-  position?: string;
+  position?: string; // rollers only (a hot knife has one spot per machine)
   installedAt?: number | null;
   lastServiceAt?: number | null;
-  pmDays?: number; // replace / service interval
+  pmDays?: number; // roller PM interval (hot knives have none)
   notes?: string;
   // Hot knives
   tipType?: 'thin' | 'wide';
@@ -96,9 +111,9 @@ export interface Equipment extends BaseDoc {
   // Rollers
   construction?: 'segmented' | 'solid';
   rollerType?: 'nip' | 'draw' | 'idler' | 'other';
-  diameter?: number;
-  length?: number;
-  covering?: string;
+  diameter?: number; // outer diameter, inches
+  length?: number; // roller length, inches
+  covering?: string; // no longer used (all rollers are rubber)
 }
 
 export interface OrderItem {
@@ -159,7 +174,7 @@ export interface Settings extends BaseDoc {
   categories?: string[];
   locations?: string[];
   units?: string[];
-  knifePmDays?: number;
+  knifePmDays?: number; // no longer used (hot knives have no PM)
   rollerPmDays?: number;
   weeklyReportDay?: number; // 0=Sun..6=Sat
   currency?: string;
@@ -174,10 +189,11 @@ export interface DocMap {
   machines: Machine;
   equipment: Equipment;
   orders: OrderGuide;
+  pms: PmLog;
   settings: Settings;
 }
 export type DocKind = keyof DocMap;
-export const DOC_KINDS: DocKind[] = ['parts', 'manufacturers', 'vendors', 'machines', 'equipment', 'orders', 'settings'];
+export const DOC_KINDS: DocKind[] = ['parts', 'manufacturers', 'vendors', 'machines', 'equipment', 'orders', 'pms', 'settings'];
 
 export interface Movement {
   id: string;
@@ -217,7 +233,7 @@ export type FieldType = 'str' | 'text' | 'num' | 'bool' | 'strs' | 'json' | 'tim
 export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   parts: {
     name: 'str', partNumber: 'str', manufacturer: 'str', category: 'str', location: 'str', description: 'text',
-    qty: 'num', minQty: 'num', maxQty: 'num', unit: 'str', unitCost: 'num', vendor: 'str', vendorPartNumber: 'str',
+    qty: 'num', minQty: 'num', orderQty: 'num', maxQty: 'num', unit: 'str', unitCost: 'num', vendor: 'str', vendorPartNumber: 'str',
     leadTimeDays: 'num', orderUrl: 'str', imageId: 'str', decommissioned: 'bool', critical: 'bool', machines: 'strs', notes: 'text',
   },
   manufacturers: { name: 'str', website: 'str', urlTemplate: 'str', notes: 'text' },
@@ -225,7 +241,8 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
     name: 'str', website: 'str', urlTemplate: 'str', contactName: 'str', phone: 'str', email: 'str', accountNumber: 'str',
     leadTimeDays: 'num', preferred: 'bool', notes: 'text',
   },
-  machines: { name: 'str', area: 'str', notes: 'text' },
+  machines: { name: 'str', area: 'str', notes: 'text', pmTracked: 'bool', pmWeeklyDays: 'num', pmMonthlyMonths: 'num' },
+  pms: { machine: 'str', date: 'str', type: 'str', doneBy: 'str', nextDue: 'str', notes: 'text' },
   equipment: {
     type: 'str', tag: 'str', status: 'str', machine: 'str', position: 'str', installedAt: 'time', lastServiceAt: 'time', pmDays: 'num',
     notes: 'text', tipType: 'str', bagSize: 'str', bagInches: 'num', construction: 'str', rollerType: 'str', diameter: 'num',
@@ -241,15 +258,27 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   },
 };
 
-// Stock status used everywhere (colours: ok=green, low=orange, out=red)
-export type StockStatus = 'ok' | 'low' | 'out' | 'retired';
-export function stockStatus(p: Pick<Part, 'qty' | 'minQty' | 'decommissioned'>): StockStatus {
+// Stock status used everywhere: ok = green, low = orange ("running low"),
+// order = red ("order now"), out = red (none left), retired = grey (decommissioned).
+export type StockStatus = 'ok' | 'low' | 'order' | 'out' | 'retired';
+type StockFields = Pick<Part, 'qty' | 'minQty' | 'orderQty' | 'decommissioned'>;
+/** Stock level at or below which a part is "order now". Uses the part's own setting, else half the reorder point. */
+export function orderNowLevel(p: Pick<Part, 'minQty' | 'orderQty'>): number | null {
+  if (p.orderQty != null) return p.orderQty;
+  if (p.minQty != null && p.minQty >= 2) return Math.floor(p.minQty / 2);
+  return null;
+}
+export function stockStatus(p: StockFields): StockStatus {
   if (p.decommissioned) return 'retired';
   const q = Number(p.qty) || 0;
   if (q <= 0) return 'out';
+  const order = orderNowLevel(p);
+  if (order != null && q <= order) return 'order';
   if (p.minQty != null && q <= p.minQty) return 'low';
   return 'ok';
 }
+/** Low, order-now or out: belongs on a reorder list. */
+export function needsReorder(s: StockStatus) { return s === 'low' || s === 'order' || s === 'out'; }
 
 export const DEFAULT_PRINT_TEMPLATE: PrintTemplate = {
   title: 'Parts Order Request',
@@ -315,6 +344,122 @@ export const SEED_MANUFACTURERS: Omit<Manufacturer, 'id'>[] = [
   { name: 'Loctite', website: 'https://www.henkel-adhesives.com', urlTemplate: '' },
   { name: '3M', website: 'https://www.3m.com', urlTemplate: '' },
   { name: 'Amazon', website: 'https://www.amazon.com', urlTemplate: 'https://www.amazon.com/s?k={pn}' },
+  // --- motors, drives & power transmission
+  { name: 'WEG', website: 'https://www.weg.net', urlTemplate: '' },
+  { name: 'Leeson', website: 'https://www.leeson.com', urlTemplate: '' },
+  { name: 'Marathon Motors', website: 'https://www.regalrexnord.com', urlTemplate: '' },
+  { name: 'Regal Rexnord', website: 'https://www.regalrexnord.com', urlTemplate: '' },
+  { name: 'Dodge', website: 'https://www.dodgeindustrial.com', urlTemplate: '' },
+  { name: 'Browning', website: 'https://www.regalrexnord.com', urlTemplate: '' },
+  { name: 'Martin Sprocket & Gear', website: 'https://www.martinsprocket.com', urlTemplate: '' },
+  { name: 'Boston Gear', website: 'https://www.bostongear.com', urlTemplate: '' },
+  { name: 'SEW-Eurodrive', website: 'https://www.seweurodrive.com', urlTemplate: '' },
+  { name: 'NORD Drivesystems', website: 'https://www.nord.com', urlTemplate: '' },
+  { name: 'Lenze', website: 'https://www.lenze.com', urlTemplate: '' },
+  { name: 'Yaskawa', website: 'https://www.yaskawa.com', urlTemplate: '' },
+  { name: 'ABB', website: 'https://new.abb.com', urlTemplate: '' },
+  { name: 'Mitsubishi Electric', website: 'https://us.mitsubishielectric.com', urlTemplate: '' },
+  { name: 'Danfoss', website: 'https://www.danfoss.com', urlTemplate: '' },
+  { name: 'Tsubaki', website: 'https://www.ustsubaki.com', urlTemplate: '' },
+  { name: 'Renold', website: 'https://www.renold.com', urlTemplate: '' },
+  { name: 'Diamond Chain', website: 'https://www.diamondchain.com', urlTemplate: '' },
+  { name: 'Lovejoy', website: 'https://www.lovejoy-inc.com', urlTemplate: '' },
+  { name: 'Ruland', website: 'https://www.ruland.com', urlTemplate: '' },
+  { name: 'Fenner Drives', website: 'https://www.fennerdrives.com', urlTemplate: '' },
+  { name: 'Optibelt', website: 'https://www.optibelt.com', urlTemplate: '' },
+  { name: 'Habasit', website: 'https://www.habasit.com', urlTemplate: '' },
+  { name: 'Intralox', website: 'https://www.intralox.com', urlTemplate: '' },
+  // --- bearings & linear motion
+  { name: 'Schaeffler (FAG / INA)', website: 'https://www.schaeffler.com', urlTemplate: '' },
+  { name: 'NTN', website: 'https://www.ntnamericas.com', urlTemplate: '' },
+  { name: 'Koyo (JTEKT)', website: 'https://koyo.jtekt.co.jp', urlTemplate: '' },
+  { name: 'McGill', website: 'https://www.regalrexnord.com', urlTemplate: '' },
+  { name: 'Sealmaster', website: 'https://www.regalrexnord.com', urlTemplate: '' },
+  { name: 'THK', website: 'https://www.thk.com', urlTemplate: '' },
+  { name: 'HIWIN', website: 'https://www.hiwin.us', urlTemplate: '' },
+  // --- pneumatics, hydraulics & fluid
+  { name: 'Norgren (IMI)', website: 'https://www.imi-precision.com', urlTemplate: '' },
+  { name: 'Emerson / Aventics', website: 'https://www.emerson.com', urlTemplate: '' },
+  { name: 'Numatics', website: 'https://www.emerson.com', urlTemplate: '' },
+  { name: 'Clippard', website: 'https://www.clippard.com', urlTemplate: '' },
+  { name: 'MAC Valves', website: 'https://www.macvalves.com', urlTemplate: '' },
+  { name: 'ARO (Ingersoll Rand)', website: 'https://www.arozone.com', urlTemplate: '' },
+  { name: 'Camozzi', website: 'https://www.camozzi.com', urlTemplate: '' },
+  { name: 'Bosch Rexroth', website: 'https://www.boschrexroth.com', urlTemplate: '' },
+  { name: 'Vickers (Eaton)', website: 'https://www.eaton.com', urlTemplate: '' },
+  { name: 'Sun Hydraulics', website: 'https://www.sunhydraulics.com', urlTemplate: '' },
+  { name: 'Swagelok', website: 'https://www.swagelok.com', urlTemplate: '' },
+  { name: 'Graco', website: 'https://www.graco.com', urlTemplate: '' },
+  { name: 'Gast', website: 'https://www.gastmfg.com', urlTemplate: '' },
+  { name: 'Busch Vacuum', website: 'https://www.buschvacuum.com', urlTemplate: '' },
+  { name: 'Becker Pumps', website: 'https://www.beckerpumps.com', urlTemplate: '' },
+  { name: 'Dixon Valve', website: 'https://www.dixonvalve.com', urlTemplate: '' },
+  // --- sensors, controls & electrical
+  { name: 'Pepperl+Fuchs', website: 'https://www.pepperl-fuchs.com', urlTemplate: '' },
+  { name: 'Balluff', website: 'https://www.balluff.com', urlTemplate: '' },
+  { name: 'Cognex', website: 'https://www.cognex.com', urlTemplate: '' },
+  { name: 'Datalogic', website: 'https://www.datalogic.com', urlTemplate: '' },
+  { name: 'Leuze', website: 'https://www.leuze.com', urlTemplate: '' },
+  { name: 'Honeywell', website: 'https://www.honeywell.com', urlTemplate: '' },
+  { name: 'Red Lion', website: 'https://www.redlion.net', urlTemplate: '' },
+  { name: 'Pilz', website: 'https://www.pilz.com', urlTemplate: '' },
+  { name: 'Schmersal', website: 'https://www.schmersal.com', urlTemplate: '' },
+  { name: 'Square D', website: 'https://www.se.com', urlTemplate: '' },
+  { name: 'WAGO', website: 'https://www.wago.com', urlTemplate: '' },
+  { name: 'Weidmüller', website: 'https://www.weidmuller.com', urlTemplate: '' },
+  { name: 'Hoffman (nVent)', website: 'https://hoffman.nvent.com', urlTemplate: '' },
+  { name: 'Bussmann (Eaton)', website: 'https://www.eaton.com', urlTemplate: '' },
+  { name: 'Littelfuse', website: 'https://www.littelfuse.com', urlTemplate: '' },
+  { name: 'Mersen', website: 'https://www.mersen.com', urlTemplate: '' },
+  { name: 'Panduit', website: 'https://www.panduit.com', urlTemplate: '' },
+  { name: 'Hubbell', website: 'https://www.hubbell.com', urlTemplate: '' },
+  { name: 'Brady', website: 'https://www.bradyid.com', urlTemplate: '' },
+  { name: 'Fluke', website: 'https://www.fluke.com', urlTemplate: '' },
+  { name: 'Fuji Electric', website: 'https://americas.fujielectric.com', urlTemplate: '' },
+  { name: 'Hotset', website: 'https://www.hotset.com', urlTemplate: '' },
+  { name: 'Durex Industries', website: 'https://www.durexindustries.com', urlTemplate: '' },
+  // --- packaging / sealing / hot melt
+  { name: 'CS Hyde', website: 'https://www.cshyde.com', urlTemplate: '' },
+  { name: 'Nordson', website: 'https://www.nordson.com', urlTemplate: '' },
+  { name: 'Valco Melton', website: 'https://www.valcomelton.com', urlTemplate: '' },
+  // --- lubricants & chemicals
+  { name: 'Mobil', website: 'https://www.mobil.com', urlTemplate: '' },
+  { name: 'Klüber', website: 'https://www.klueber.com', urlTemplate: '' },
+  { name: 'Lubriplate', website: 'https://www.lubriplate.com', urlTemplate: '' },
+  { name: 'CRC', website: 'https://www.crcindustries.com', urlTemplate: '' },
+  { name: 'WD-40', website: 'https://www.wd40.com', urlTemplate: '' },
+];
+
+/** Common industrial suppliers / distributors (where parts are bought), with search links where the format is known. */
+export const SEED_VENDORS: Omit<Vendor, 'id'>[] = [
+  { name: 'McMaster-Carr', website: 'https://www.mcmaster.com', urlTemplate: 'https://www.mcmaster.com/{pn}', leadTimeDays: 1 },
+  { name: 'Grainger', website: 'https://www.grainger.com', urlTemplate: 'https://www.grainger.com/search?searchQuery={pn}', leadTimeDays: 2 },
+  { name: 'MSC Industrial', website: 'https://www.mscdirect.com', urlTemplate: 'https://www.mscdirect.com/browse/tn?searchterm={pn}', leadTimeDays: 2 },
+  { name: 'Motion Industries', website: 'https://www.motion.com', urlTemplate: 'https://www.motion.com/search?q={pn}' },
+  { name: 'Applied Industrial', website: 'https://www.applied.com', urlTemplate: 'https://www.applied.com/search?text={pn}' },
+  { name: 'Fastenal', website: 'https://www.fastenal.com', urlTemplate: 'https://www.fastenal.com/product?query={pn}' },
+  { name: 'Zoro', website: 'https://www.zoro.com', urlTemplate: 'https://www.zoro.com/search?q={pn}' },
+  { name: 'Global Industrial', website: 'https://www.globalindustrial.com', urlTemplate: 'https://www.globalindustrial.com/searchResult?q={pn}' },
+  { name: 'Uline', website: 'https://www.uline.com', urlTemplate: 'https://www.uline.com/Search?keywords={pn}' },
+  { name: 'AutomationDirect', website: 'https://www.automationdirect.com', urlTemplate: 'https://www.automationdirect.com/adc/shopping/catalog?keywords={pn}' },
+  { name: 'Misumi', website: 'https://us.misumi-ec.com', urlTemplate: 'https://us.misumi-ec.com/vona2/result/?Keyword={pn}' },
+  { name: 'Digi-Key', website: 'https://www.digikey.com', urlTemplate: 'https://www.digikey.com/en/products/result?keywords={pn}' },
+  { name: 'Mouser', website: 'https://www.mouser.com', urlTemplate: 'https://www.mouser.com/c/?q={pn}' },
+  { name: 'Newark', website: 'https://www.newark.com', urlTemplate: 'https://www.newark.com/search?st={pn}' },
+  { name: 'Galco', website: 'https://www.galco.com', urlTemplate: 'https://www.galco.com/catalogsearch/result/?q={pn}' },
+  { name: 'RS Americas (Allied)', website: 'https://us.rs-online.com', urlTemplate: '' },
+  { name: 'Radwell', website: 'https://www.radwell.com', urlTemplate: '' },
+  { name: 'Kaman / Kaman Distribution', website: 'https://www.kamandirect.com', urlTemplate: '' },
+  { name: 'BDI (Bearing Distributors)', website: 'https://www.bdi-usa.com', urlTemplate: '' },
+  { name: 'Wesco / Anixter', website: 'https://www.wesco.com', urlTemplate: '' },
+  { name: 'Graybar', website: 'https://www.graybar.com', urlTemplate: '' },
+  { name: 'Border States', website: 'https://www.borderstates.com', urlTemplate: '' },
+  { name: 'Rexel / Gexpro', website: 'https://www.rexelusa.com', urlTemplate: '' },
+  { name: 'Northern Tool', website: 'https://www.northerntool.com', urlTemplate: '' },
+  { name: 'The Home Depot', website: 'https://www.homedepot.com', urlTemplate: 'https://www.homedepot.com/s/{pn}' },
+  { name: "Lowe's", website: 'https://www.lowes.com', urlTemplate: 'https://www.lowes.com/search?searchTerm={pn}' },
+  { name: 'Amazon Business', website: 'https://www.amazon.com', urlTemplate: 'https://www.amazon.com/s?k={pn}' },
+  { name: 'eBay (surplus / used)', website: 'https://www.ebay.com', urlTemplate: 'https://www.ebay.com/sch/i.html?_nkw={pn}' },
 ];
 
 export function buildOrderUrl(template: string | undefined, pn: string | undefined): string {

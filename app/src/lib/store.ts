@@ -29,7 +29,7 @@ export interface State {
   clockSkew: number;
 }
 
-const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {} });
+const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {}, pms: {} });
 
 let state: State = {
   phase: 'boot', me: null, users: [], settings: DEFAULT_SETTINGS, docs: emptyDocs(), notifications: [], notifSeen: 0, activity: [],
@@ -223,7 +223,8 @@ export function applyAppearance(prefs: UserPrefs | null) {
   const p = { ...local, ...(prefs || {}) };
   safeSet('ppip.prefs', JSON.stringify(p));
   const root = document.documentElement;
-  const dark = p.theme === 'dark' || (p.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  // dark is the default
+  const dark = p.theme !== 'light' && (p.theme !== 'system' || matchMedia('(prefers-color-scheme: dark)').matches);
   root.dataset.theme = dark ? 'dark' : 'light';
   root.dataset.size = p.textSize || 'standard';
 }
@@ -307,6 +308,9 @@ function handleMessage(msg: Record<string, unknown>) {
     case 'presence': setState({ online: msg.online as State['online'] }); break;
     case 'users': setState((s) => ({ users: s.me?.role === 'admin' ? mergeUsers(s.users, msg.users as PublicUser[]) : (msg.users as PublicUser[]) })); break;
     case 'reload': loadBootstrap().catch(() => {}); break;
+    case 'tour': // an admin turned the guided tour on for this account
+      if (state.me) setState({ me: { ...state.me, prefs: { ...state.me.prefs, tutorialDone: false } } });
+      break;
     case 'phoneUpload': setState((s) => ({ phoneUploads: { ...s.phoneUploads, [msg.code as string]: msg.imageId as string } })); break;
     case 'notification': {
       const n = msg.row as AppNotification;
