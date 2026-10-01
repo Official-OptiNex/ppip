@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { useStore } from '../lib/store';
+import { useCanEdit, useIsAdmin, useStore } from '../lib/store';
+import { runUndo } from '../components/UndoBar';
+import { Undo2, Redo2 } from 'lucide-react';
 import { fmtDateTime, useDebounced } from '../lib/util';
 import { SearchInput, Spinner, Empty } from '../components/ui';
 import type { Activity } from '../../../shared/types';
@@ -13,6 +15,9 @@ export function ActivityPage() {
   const [rows, setRows] = useState<Activity[] | null>(null);
   const [more, setMore] = useState(true);
   const live = useStore((s) => s.activity[0]?.id);
+  const canEdit = useCanEdit();
+  const isAdmin = useIsAdmin();
+  const meId = useStore((s) => s.me?.id);
   const dq = useDebounced(q, 250);
 
   const load = async (before?: number) => {
@@ -29,7 +34,7 @@ export function ActivityPage() {
 
   return (
     <div>
-      <div className="page-head"><div><h1>Activity log</h1><div className="sub">Every change, who made it and when. Updates live.</div></div></div>
+      <div className="page-head"><div><h1>Activity log</h1><div className="sub">Every change, who made it and when. Made a mistake? Click <b>Undo</b> next to it (changes can be undone for 30 days).</div></div></div>
       <div className="row wrap" style={{ marginBottom: '1rem' }}>
         <SearchInput value={q} onChange={setQ} placeholder="Search activity (part name, person, machine…)" />
         <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={kind} onChange={(e) => setKind(e.target.value)}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
@@ -39,7 +44,13 @@ export function ActivityPage() {
           <div className="list">
             {rows.map((a) => {
               const link = a.kind === 'parts' && a.refId ? `#/parts/${a.refId}` : a.kind === 'orders' && a.refId ? `#/orders/${a.refId}` : undefined;
-              const body = <><div className="grow"><div>{a.summary}</div><div className="small muted">{a.userName}</div></div><div className="small muted nowrap">{fmtDateTime(a.at)}</div></>;
+              const canUndo = canEdit && a.undoId && !a.undone && (isAdmin || a.undoUserId === meId);
+              const isRedo = a.action === 'undo';
+              const undoBtn = canUndo ? (
+                <button className="btn sm" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); if (await runUndo(a.undoId!, a.summary)) setTimeout(() => load().catch(() => {}), 400); }}
+                  title={isRedo ? 'Redo this' : 'Undo this change'}>{isRedo ? <Redo2 size={16} /> : <Undo2 size={16} />}{isRedo ? 'Redo' : 'Undo'}</button>
+              ) : a.undone ? <span className="pill neutral">{isRedo ? 'Redone' : 'Undone'}</span> : null;
+              const body = <><div className="grow"><div>{a.summary}</div><div className="small muted">{a.userName}</div></div><div className="small muted nowrap">{fmtDateTime(a.at)}</div>{undoBtn}</>;
               return link ? <a key={a.id} className="list-item" href={link}>{body}</a> : <div key={a.id} className="list-item">{body}</div>;
             })}
           </div>

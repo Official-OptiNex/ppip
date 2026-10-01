@@ -230,6 +230,9 @@ export interface Activity {
   kind?: string | null;
   refId?: string | null;
   summary: string;
+  undoId?: string | null; // set when this change can be undone
+  undone?: number | null;
+  undoUserId?: string | null;
 }
 
 export interface AppNotification {

@@ -4,6 +4,7 @@ import { useRoute, setCurrency } from './lib/util';
 import { Layout } from './components/Layout';
 import { ConfirmHost, Toasts, Spinner } from './components/ui';
 import { TourHost } from './components/Tour';
+import { UndoBar } from './components/UndoBar';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { PartsPage } from './pages/Parts';
@@ -67,6 +68,7 @@ export function App() {
       <Toasts />
       <ConfirmHost />
       <TourHost />
+      <UndoBar />
     </>
   );
 }

@@ -13,6 +13,8 @@ interface Env { BACKUP_KEY?: string }
 type Row = Record<string, SqlStorageValue>;
 interface AuthUser { id: string; name: string; email: string; role: Role }
 interface Ctx { user: AuthUser | null; tokenHash?: string; url: URL; req: Request }
+interface UndoOps { docs: { kind: string; id: string; before: Record<string, unknown> | null; afterUpdatedAt: number | null }[]; addedMovements: string[]; removedMovements: Row[] }
+interface UndoRec extends UndoOps { activity: string[]; summaries: string[] }
 
 // Initial admin (password is stored only as a PBKDF2 hash).
 const SEED_ADMIN = {
@@ -27,6 +29,7 @@ const UPLOAD_TTL = 20 * 60_000;
 const MAX_BACKUPS_AUTO = 21;
 const CHUNK = 900_000; // bytes per stored chunk (DO SQLite values max out at 2 MB)
 const RANK: Record<Role, number> = { viewer: 0, editor: 1, admin: 2 };
+const UNDO_DAYS = 30; // changes can be undone for this long
 
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -88,6 +91,8 @@ function clean(kind: DocKind, patch: Record<string, unknown>) {
 export class Store extends DurableObject<Env> {
   sql: SqlStorage;
   failedLogins = new Map<string, { count: number; until: number }>();
+  /** While a change is running, remembers how things looked before it so it can be undone. */
+  rec: UndoRec | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -126,7 +131,12 @@ export class Store extends DurableObject<Env> {
         id TEXT PRIMARY KEY, at INTEGER, reason TEXT, size INTEGER, chunks INTEGER, counts TEXT);
       CREATE TABLE IF NOT EXISTS backup_chunks (
         backup_id TEXT, seq INTEGER, data BLOB, PRIMARY KEY (backup_id, seq));
+      CREATE TABLE IF NOT EXISTS undo (
+        id TEXT PRIMARY KEY, at INTEGER, user_id TEXT, user_name TEXT, summary TEXT, ops TEXT, undone INTEGER DEFAULT 0);
+      CREATE INDEX IF NOT EXISTS undo_at ON undo(at);
     `);
+    const actCols = this.sql.exec(`PRAGMA table_info(activity)`).toArray().map((r) => r.name);
+    if (!actCols.includes('undo_id')) this.sql.exec(`ALTER TABLE activity ADD COLUMN undo_id TEXT`);
     // v3: badge numbers for one-scan sign-in
     const userCols = this.sql.exec(`PRAGMA table_info(users)`).toArray().map((r) => r.name);
     if (!userCols.includes('badge')) this.sql.exec(`ALTER TABLE users ADD COLUMN badge TEXT`);
@@ -158,6 +168,7 @@ export class Store extends DurableObject<Env> {
     return r ? (JSON.parse(r.data as string) as T) : null;
   }
   putDoc(kind: string, doc: Record<string, unknown>) {
+    this.captureBefore(kind, doc.id as string);
     this.sql.exec(`INSERT OR REPLACE INTO docs (kind,id,data,updated_at) VALUES (?,?,?,?)`, kind, doc.id as string, JSON.stringify(doc), Number(doc.updatedAt) || Date.now());
   }
   allDocs<T = Record<string, unknown>>(kind: string): T[] {
@@ -193,6 +204,7 @@ export class Store extends DurableObject<Env> {
     const row = { id: uid(), at: Date.now(), userName: user?.name ?? 'System', action, kind, refId, summary };
     this.sql.exec(`INSERT INTO activity (id,at,user_name,action,kind,ref_id,summary) VALUES (?,?,?,?,?,?,?)`,
       row.id, row.at, row.userName, action, kind, refId, summary);
+    if (this.rec) { this.rec.activity.push(row.id); this.rec.summaries.push(summary); }
     this.broadcast({ t: 'activity', row });
     return row;
   }
@@ -210,6 +222,7 @@ export class Store extends DurableObject<Env> {
     };
     this.sql.exec(`INSERT INTO movements (id,part_id,part_name,delta,qty_after,kind,machine,note,user_id,user_name,unit_cost,at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       row.id, row.partId, row.partName, delta, row.qtyAfter, kind, row.machine, row.note, user?.id ?? null, row.userName, row.unitCost, row.at);
+    if (this.rec) this.rec.addedMovements.push(row.id);
     this.broadcast({ t: 'movement', row });
   }
 
@@ -221,6 +234,94 @@ export class Store extends DurableObject<Env> {
     else if (after === 'order') this.notify('danger', `ORDER NOW: ${p.name}`, `Only ${p.qty} ${p.unit || 'ea'} left${where}`, `#/parts/${p.id}`);
     else if (after === 'low') this.notify('warn', `Running low: ${p.name}`, `${p.qty} ${p.unit || 'ea'} left (reorder at ${p.minQty})${where}`, `#/parts/${p.id}`);
     else if (after === 'ok' && (before === 'out' || before === 'order' || before === 'low')) this.notify('success', `Restocked: ${p.name}`, `${p.qty} ${p.unit || 'ea'} in stock`, `#/parts/${p.id}`);
+  }
+
+  // ------------------------------------------------------------------ undo
+  captureBefore(kind: string, id: string) {
+    const r = this.rec;
+    if (!r || r.docs.some((d) => d.kind === kind && d.id === id)) return;
+    const row = this.sql.exec(`SELECT data FROM docs WHERE kind=? AND id=?`, kind, id).toArray()[0];
+    r.docs.push({ kind, id, before: row ? JSON.parse(row.data as string) : null, afterUpdatedAt: null });
+  }
+
+  /** Run a change while recording its undo information; responds with the result plus X-Undo-Id / X-Undo-Summary headers. */
+  undoable(c: Ctx, fn: () => unknown | Promise<unknown>, summaryOverride?: string): Promise<Response> {
+    return (async () => {
+      this.rec = { docs: [], addedMovements: [], removedMovements: [], activity: [], summaries: [] };
+      let result: unknown;
+      try { result = await fn(); } catch (e) { this.rec = null; throw e; }
+      const rec = this.rec!;
+      this.rec = null;
+      if (!rec.docs.length && !rec.addedMovements.length && !rec.removedMovements.length) return json(result);
+      for (const d of rec.docs) {
+        const row = this.sql.exec(`SELECT data FROM docs WHERE kind=? AND id=?`, d.kind, d.id).toArray()[0];
+        d.afterUpdatedAt = row ? Number(JSON.parse(row.data as string).updatedAt) || 0 : null;
+      }
+      const id = uid();
+      const summary = (summaryOverride || rec.summaries[0] || 'Change').slice(0, 300) + (rec.summaries.length > 1 && !summaryOverride ? ` (+${rec.summaries.length - 1} more)` : '');
+      this.sql.exec(`INSERT INTO undo (id,at,user_id,user_name,summary,ops) VALUES (?,?,?,?,?,?)`, id, Date.now(), c.user?.id ?? null, c.user?.name ?? 'System', summary,
+        JSON.stringify({ docs: rec.docs, addedMovements: rec.addedMovements, removedMovements: rec.removedMovements }));
+      for (const a of rec.activity) this.sql.exec(`UPDATE activity SET undo_id=? WHERE id=?`, id, a);
+      return json(result, 200, { 'X-Undo-Id': id, 'X-Undo-Summary': encodeURIComponent(summary) });
+    })();
+  }
+
+  async runUndo(c: Ctx, id: string, force: boolean): Promise<Response> {
+    const u = this.need(c, 'editor');
+    const row = this.sql.exec(`SELECT * FROM undo WHERE id=?`, id).toArray()[0];
+    if (!row) throw new HttpError(404, `This change is too old to undo (changes can be undone for ${UNDO_DAYS} days).`);
+    if (row.undone) throw new HttpError(400, 'That change was already undone.');
+    if (row.user_id !== u.id && u.role !== 'admin') throw new HttpError(403, `Only ${row.user_name} or an admin can undo this change.`);
+    const ops = JSON.parse(row.ops as string) as UndoOps;
+    // has anyone changed these things since?
+    const changed: string[] = [];
+    for (const d of ops.docs) {
+      const cur = this.sql.exec(`SELECT data FROM docs WHERE kind=? AND id=?`, d.kind, d.id).toArray()[0];
+      const curAt = cur ? Number(JSON.parse(cur.data as string).updatedAt) || 0 : null;
+      if (curAt !== d.afterUpdatedAt) {
+        const doc = cur ? JSON.parse(cur.data as string) : d.before;
+        changed.push(`${doc?.name || doc?.tag || doc?.title || doc?.machine || d.kind}${cur ? ` (changed by ${doc.updatedBy || 'someone'})` : ' (deleted since)'}`);
+      }
+    }
+    if (changed.length && !force) return json({ error: 'Changed since', conflict: true, changed }, 409);
+    const summary = `Undid: ${row.summary}`;
+    return this.undoable(c, () => {
+      this.ctx.storage.transactionSync(() => {
+        const now = Date.now();
+        for (const d of [...ops.docs].reverse()) {
+          if (d.before) {
+            const doc = { ...d.before, updatedAt: now, updatedBy: u.name };
+            this.putDoc(d.kind, doc);
+            this.broadcast({ t: 'upsert', kind: d.kind, doc });
+          } else {
+            this.captureBefore(d.kind, d.id);
+            this.sql.exec(`DELETE FROM docs WHERE kind=? AND id=?`, d.kind, d.id);
+            this.broadcast({ t: 'delete', kind: d.kind, id: d.id });
+          }
+        }
+        for (const mid of ops.addedMovements) {
+          const mv = this.sql.exec(`SELECT * FROM movements WHERE id=?`, mid).toArray()[0];
+          if (mv) { this.rec?.removedMovements.push(mv); this.sql.exec(`DELETE FROM movements WHERE id=?`, mid); }
+        }
+        for (const mv of ops.removedMovements) {
+          const cols = Object.keys(mv);
+          this.sql.exec(`INSERT OR REPLACE INTO movements (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, ...cols.map((k) => mv[k] as SqlStorageValue));
+          this.rec?.addedMovements.push(mv.id as string);
+        }
+        this.sql.exec(`UPDATE undo SET undone=1 WHERE id=?`, id);
+      });
+      this.log(u, 'undo', null, null, summary);
+      this.broadcast({ t: 'movement', row: null });
+      return { ok: true, summary };
+    }, summary);
+  }
+
+  undoList(c: Ctx) {
+    const u = this.need(c, 'editor');
+    const rows = u.role === 'admin'
+      ? this.sql.exec(`SELECT id, at, user_name AS userName, user_id AS userId, summary, undone FROM undo ORDER BY at DESC LIMIT 100`).toArray()
+      : this.sql.exec(`SELECT id, at, user_name AS userName, user_id AS userId, summary, undone FROM undo WHERE user_id=? ORDER BY at DESC LIMIT 100`, u.id).toArray();
+    return rows;
   }
 
   // ------------------------------------------------------------------ auth
@@ -327,13 +428,15 @@ export class Store extends DurableObject<Env> {
     if (seg[0] === 'docs' && seg[1] && seg[2]) {
       const kind = seg[1] as DocKind;
       if (!DOC_KINDS.includes(kind)) throw new HttpError(404, 'Unknown collection.');
-      if (m === 'PUT') return json(await this.upsert(c, kind, seg[2], (await this.body<{ patch: Record<string, unknown> }>(req)).patch));
-      if (m === 'DELETE') return json(this.remove(c, kind, seg[2]));
+      if (m === 'PUT') { const b = await this.body<{ patch: Record<string, unknown> }>(req); return this.undoable(c, () => this.upsert(c, kind, seg[2], b.patch)); }
+      if (m === 'DELETE') return this.undoable(c, () => this.remove(c, kind, seg[2]));
     }
-    if (seg[0] === 'parts' && seg[1] && seg[2] === 'adjust' && m === 'POST') return json(this.adjust(c, seg[1], await this.body(req)));
-    if (seg[0] === 'equipment' && seg[1] && seg[2] === 'action' && m === 'POST') return json(this.equipmentAction(c, seg[1], await this.body(req)));
-    if (seg[0] === 'orders' && seg[1] && seg[2] === 'receive' && m === 'POST') return json(this.receiveOrder(c, seg[1], await this.body(req)));
-    if (p === '/import' && m === 'POST') return json(this.importRows(c, await this.body(req)));
+    if (seg[0] === 'parts' && seg[1] && seg[2] === 'adjust' && m === 'POST') { const b = await this.body(req); return this.undoable(c, () => this.adjust(c, seg[1], b)); }
+    if (seg[0] === 'equipment' && seg[1] && seg[2] === 'action' && m === 'POST') { const b = await this.body(req); return this.undoable(c, () => this.equipmentAction(c, seg[1], b)); }
+    if (seg[0] === 'orders' && seg[1] && seg[2] === 'receive' && m === 'POST') { const b = await this.body(req); return this.undoable(c, () => this.receiveOrder(c, seg[1], b)); }
+    if (p === '/import' && m === 'POST') { const b = await this.body(req); return this.undoable(c, () => this.importRows(c, b)); }
+    if (seg[0] === 'undo' && seg[1] && m === 'POST') { const b = await this.body<{ force?: boolean }>(req).catch(() => ({ force: false })); return this.runUndo(c, seg[1], !!b.force); }
+    if (p === '/undo' && m === 'GET') return json(this.undoList(c));
 
     // ---- read-only queries
     if (p === '/movements' && m === 'GET') return json(this.movements(c, url));
@@ -551,8 +654,9 @@ export class Store extends DurableObject<Env> {
     if (kind === 'settings') throw new HttpError(400, 'Settings cannot be deleted.');
     const existing = this.getDoc<Record<string, unknown>>(kind, id);
     if (!existing) return { ok: true };
+    this.captureBefore(kind, id);
     this.sql.exec(`DELETE FROM docs WHERE kind=? AND id=?`, kind, id);
-    if (kind === 'parts' && existing.imageId) this.sql.exec(`DELETE FROM images WHERE id=?`, existing.imageId as string);
+    // the photo is kept for a few days (daily cleanup removes unused photos) so Undo can bring the part back with it
     this.broadcast({ t: 'delete', kind, id });
     this.log(u, 'delete', kind, id, `Deleted ${singular(kind)} “${kind === 'pms' ? `${existing.type} PM on ${existing.machine} (${existing.date})` : existing.name || existing.tag || existing.title || id}”`);
     return { ok: true };
@@ -710,8 +814,10 @@ export class Store extends DurableObject<Env> {
     if (q.get('q')) { where.push('(summary LIKE ? OR user_name LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
     const limit = Math.min(Number(q.get('limit')) || 100, 1000);
     return this.sql.exec(
-      `SELECT id, at, user_name AS userName, action, kind, ref_id AS refId, summary FROM activity
-       ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY at DESC LIMIT ${limit}`, ...args).toArray();
+      `SELECT a.id, a.at, a.user_name AS userName, a.action, a.kind, a.ref_id AS refId, a.summary, a.undo_id AS undoId,
+         u.undone AS undone, u.user_id AS undoUserId
+       FROM activity a LEFT JOIN undo u ON u.id = a.undo_id
+       ${where.length ? 'WHERE ' + where.map((w) => w.replace(/\b(ref_id|kind|at|summary|user_name)\b/g, 'a.$1')).join(' AND ') : ''} ORDER BY a.at DESC LIMIT ${limit}`, ...args).toArray();
   }
 
   analytics(c: Ctx, url: URL) {
@@ -1070,6 +1176,7 @@ export class Store extends DurableObject<Env> {
     this.sql.exec(`DELETE FROM sessions WHERE expires_at<?`, now);
     this.sql.exec(`DELETE FROM uploads WHERE expires_at<?`, now - DAY);
     this.sql.exec(`DELETE FROM notifications WHERE at<?`, now - 120 * DAY);
+    this.sql.exec(`DELETE FROM undo WHERE at<?`, now - UNDO_DAYS * DAY);
     // remove images nobody references any more (older than 2 days so in-progress edits are safe)
     const used = new Set(this.allDocs<Part>('parts').map((p) => p.imageId).filter(Boolean));
     for (const r of this.sql.exec(`SELECT id FROM images WHERE at<?`, now - 2 * DAY).toArray()) {
