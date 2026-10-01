@@ -4,6 +4,7 @@ import { login } from '../lib/store';
 import { api, errorMessage, isFileMode, serverUrl, setServerUrl } from '../lib/api';
 import { useBadgeScanner } from '../lib/badge';
 import { Field, Spinner } from '../components/ui';
+import { Logo, APP_NAME } from '../components/Logo';
 
 export function Login() {
   const [name, setName] = useState('');
@@ -26,7 +27,7 @@ export function Login() {
 
   const checkServer = () => {
     if (!isFileMode) return true;
-    if (!/^https?:\/\//.test(server.trim())) { setErr('Enter the web address of your PPIP site (starts with https://).'); return false; }
+    if (!/^https?:\/\//.test(server.trim())) { setErr('Enter the web address of your Process Engineer site (starts with https://).'); return false; }
     setServerUrl(server);
     return true;
   };
@@ -66,7 +67,7 @@ export function Login() {
   return (
     <div className="login-wrap">
       <div className="login-art">
-        <div className="row"><div className="brand-logo" style={{ background: 'rgba(255,255,255,.18)' }}>PPIP</div><b style={{ fontSize: '1.2rem' }}>Parts & PM</b></div>
+        <div className="row" style={{ gap: '0.8rem' }}><Logo size={52} /><b style={{ fontSize: '1.45rem', letterSpacing: '-0.01em' }}>{APP_NAME}</b></div>
         <div>
           <h1>Every part. Every machine.<br />Always up to date.</h1>
           <ul>
@@ -81,9 +82,10 @@ export function Login() {
       </div>
       <div className="login-form">
         <div className="login-card stack">
+          <div className="row mobile-login-brand" style={{ gap: '0.8rem', justifyContent: 'center' }}><Logo size={48} /><b style={{ fontSize: '1.4rem' }}>{APP_NAME}</b></div>
           {isFileMode && (
             <div className="card card-pad">
-              <Field label={<span className="row" style={{ gap: 6 }}><Server size={16} />Server address</span>} hint="Running from USB. This is the web address of your PPIP site.">
+              <Field label={<span className="row" style={{ gap: 6 }}><Server size={16} />Server address</span>} hint="Running from USB. This is the web address of your Process Engineer site.">
                 <input className="input" value={server} onChange={(e) => setServer(e.target.value)} placeholder="https://ppip.yourname.workers.dev" />
               </Field>
             </div>

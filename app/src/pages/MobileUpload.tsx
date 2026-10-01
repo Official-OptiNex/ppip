@@ -4,6 +4,7 @@ import { api, errorMessage } from '../lib/api';
 import { applyAppearance } from '../lib/store';
 import { prepareImage } from '../lib/util';
 import { Spinner } from '../components/ui';
+import { Logo } from '../components/Logo';
 
 /** Page opened on a phone from the QR code. No login needed; the one-time code is the key. */
 export function MobileUpload({ code }: { code: string }) {
@@ -39,7 +40,7 @@ export function MobileUpload({ code }: { code: string }) {
   return (
     <div className="center-screen" style={{ alignItems: 'start' }}>
       <div className="card card-pad stack" style={{ width: '100%', maxWidth: 480, marginTop: '4vh', padding: '1.5rem' }}>
-        <div className="row"><div className="brand-logo">PPIP</div><div><h2>Send a part photo</h2>{info?.label && <div className="muted">For: <b>{info.label}</b></div>}</div></div>
+        <div className="row"><Logo size={44} /><div><h2>Send a part photo</h2>{info?.label && <div className="muted">For: <b>{info.label}</b></div>}</div></div>
         {!info && !err && <div className="center"><Spinner /></div>}
         {err && <div className="banner danger">{err}</div>}
         {done ? (

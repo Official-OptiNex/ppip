@@ -10,6 +10,7 @@ import { savePrefs } from '../lib/store';
 import { isFileMode, safeGet, safeSet } from '../lib/api';
 import { Thumb } from './ui';
 import { QuickLogBubble } from './QuickLog';
+import { Logo, APP_NAME } from './Logo';
 import { BadgeNotice } from './BadgeSetup';
 import type { Part, Equipment, OrderGuide } from '../../../shared/types';
 
@@ -73,9 +74,9 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
       {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
       <aside className={`sidebar ${navOpen ? 'open' : ''}`}>
         <div className="brand">
-          <div className="brand-logo">{(settings.printTemplate?.logoText || 'PPIP').slice(0, 4)}</div>
+          <Logo size={44} />
           <div className="grow">
-            <div className="brand-name ellipsis">Parts & PM</div>
+            <div className="brand-name">{APP_NAME}</div>
             <div className="brand-sub ellipsis">{settings.companyName || 'Inventory'}</div>
           </div>
           <button className="btn icon ghost mobile-only" onClick={() => setNavOpen(false)} aria-label="Close menu"><X /></button>

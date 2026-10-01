@@ -1,6 +1,6 @@
 {
-  "name": "Parts & PM",
-  "short_name": "Parts",
+  "name": "Process Engineer",
+  "short_name": "Process Eng.",
   "description": "Parts inventory, stock alerts, order guides and PM tracking",
   "start_url": "./",
   "scope": "./",

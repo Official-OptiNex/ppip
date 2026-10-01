@@ -4,6 +4,7 @@ import { needsReorder, DEFAULT_PRINT_TEMPLATE, type OrderGuide, type OrderItem, 
 import { api } from '../lib/api';
 import { applyUpsert, deleteDoc, getState, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { fmtDate, money, navigate, stockStatus, todayISO, matches, reorderQty, timeAgo, setQuery } from '../lib/util';
+import { Logo } from '../components/Logo';
 import { Combobox, Empty, Field, SearchInput, confirmDialog, NumberInput, Spinner } from '../components/ui';
 
 export const ORDER_STATUS: Record<OrderStatus, { label: string; cls: string }> = {
@@ -264,7 +265,7 @@ export function OrderSheet({ order, tpl, settings, blankRows = 0 }: { order: Par
   return (
     <div className="print-doc" style={{ fontSize: `${(tpl.fontScale || 1) * 100}%` }}>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', borderBottom: `3px solid ${accent}`, paddingBottom: 10, marginBottom: 14 }}>
-        {tpl.showLogo && <div style={{ background: accent, color: '#fff', fontWeight: 800, borderRadius: 8, padding: '10px 12px', fontSize: '1.1em' }}>{tpl.logoText || 'PPIP'}</div>}
+        {tpl.showLogo && <Logo size={58} />}
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '1.6em', fontWeight: 800 }}>{tpl.title}</div>
           <div style={{ color: '#444' }}>{[settings.companyName, tpl.subtitle].filter(Boolean).join(' · ')}</div>
