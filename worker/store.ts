@@ -140,7 +140,8 @@ export class Store extends DurableObject<Env> {
     // v3: badge numbers for one-scan sign-in
     const userCols = this.sql.exec(`PRAGMA table_info(users)`).toArray().map((r) => r.name);
     if (!userCols.includes('badge')) this.sql.exec(`ALTER TABLE users ADD COLUMN badge TEXT`);
-    this.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_badge ON users(badge) WHERE badge IS NOT NULL`);
+    this.sql.exec(`DROP INDEX IF EXISTS users_badge`);
+    this.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_badge_ci ON users(lower(badge)) WHERE badge IS NOT NULL`);
     const seeded = this.sql.exec(`SELECT value FROM meta WHERE key='seeded'`).toArray()[0];
     if (!seeded) {
       const now = Date.now();
@@ -489,12 +490,12 @@ export class Store extends DurableObject<Env> {
   async badgeLogin(req: Request, raw: string, device?: string) {
     if (this.settings().badgeLogin === false) throw new HttpError(403, 'Badge sign-in is turned off. Use your name or email and password.');
     const badge = normBadge(raw);
-    if (!badge) throw new HttpError(400, 'Badge numbers are 2 to 8 digits.');
+    if (!badge) throw new HttpError(400, BADGE_RULE);
     const now = Date.now();
     const key = '__badge__'; // shared limit so badge numbers can't be guessed by trying many
     const f = this.failedLogins.get(key);
     if (f && f.until > now) throw new HttpError(429, `Too many unknown badges. Try again in ${Math.ceil((f.until - now) / 60000)} min, or sign in with your password.`);
-    const r = this.sql.exec(`SELECT * FROM users WHERE badge=? AND active=1`, badge).toArray()[0];
+    const r = this.sql.exec(`SELECT * FROM users WHERE lower(badge)=lower(?) AND active=1`, badge).toArray()[0];
     if (!r) {
       const count = (f && f.until > now - 15 * 60000 ? f.count : 0) + 1;
       this.failedLogins.set(key, { count, until: count >= 20 ? now + 10 * 60000 : 0 });
@@ -510,8 +511,8 @@ export class Store extends DurableObject<Env> {
   setBadge(userId: string, raw: string | null | undefined) {
     if (raw == null || String(raw).trim() === '') { this.sql.exec(`UPDATE users SET badge=NULL WHERE id=?`, userId); return; }
     const badge = normBadge(String(raw));
-    if (!badge) throw new HttpError(400, 'Badge numbers are 2 to 8 digits.');
-    const other = this.sql.exec(`SELECT name FROM users WHERE badge=? AND id<>?`, badge, userId).toArray()[0];
+    if (!badge) throw new HttpError(400, BADGE_RULE);
+    const other = this.sql.exec(`SELECT name FROM users WHERE lower(badge)=lower(?) AND id<>?`, badge, userId).toArray()[0];
     if (other) throw new HttpError(400, `Badge ${badge} already belongs to ${other.name}.`);
     this.sql.exec(`UPDATE users SET badge=? WHERE id=?`, badge, userId);
   }
@@ -1008,8 +1009,8 @@ export class Store extends DurableObject<Env> {
       if (!b.password || b.password.length < 6) throw new HttpError(400, 'Password must be at least 6 characters.');
       this.assertUnique(name, email);
       const newId = uid();
-      if (b.badge && !normBadge(b.badge)) throw new HttpError(400, 'Badge numbers are 2 to 8 digits.');
-      if (b.badge) { const other = this.sql.exec(`SELECT name FROM users WHERE badge=?`, normBadge(b.badge)).toArray()[0]; if (other) throw new HttpError(400, `Badge ${normBadge(b.badge)} already belongs to ${other.name}.`); }
+      if (b.badge && !normBadge(b.badge)) throw new HttpError(400, BADGE_RULE);
+      if (b.badge) { const other = this.sql.exec(`SELECT name FROM users WHERE lower(badge)=lower(?)`, normBadge(b.badge)).toArray()[0]; if (other) throw new HttpError(400, `Badge ${normBadge(b.badge)} already belongs to ${other.name}.`); }
       this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at,badge) VALUES (?,?,?,?,?,1,'{}',?,?)`, newId, email, name, b.role, await hashPassword(b.password), Date.now(), b.badge ? normBadge(b.badge) : null);
       this.log(u, 'create', 'users', newId, `Created account for ${name} (${b.role})`);
       this.broadcast({ t: 'users', users: this.users(false) });
@@ -1201,10 +1202,11 @@ export class Store extends DurableObject<Env> {
   }
 }
 
-/** Keep only the digits a scanner sends (some add prefixes/suffixes); valid badges are 2–8 digits. */
+const BADGE_RULE = 'Enter the badge ID exactly as it is on the badge (letters, numbers and symbols like 7A:018 are fine).';
+/** Badge IDs can contain any letters, numbers and symbols (e.g. "7a:018"). Only surrounding spaces and invisible control characters are dropped. */
 function normBadge(raw: string): string | null {
-  const d = String(raw).replace(/\D/g, '');
-  return d.length >= 2 && d.length <= 8 ? d : null;
+  const b = String(raw).replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  return b.length >= 1 && b.length <= 40 ? b : null;
 }
 
 function singular(kind: string) {

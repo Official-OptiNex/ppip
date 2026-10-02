@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, LogIn, Package, Bell, Flame, Printer, Wifi, Server, ScanLine, CheckCircle2 } from 'lucide-react';
 import { login } from '../lib/store';
 import { api, errorMessage, isFileMode, serverUrl, setServerUrl } from '../lib/api';
-import { useBadgeScanner } from '../lib/badge';
+import { cleanBadge, useBadgeCapture } from '../lib/badge';
 import { Field, Spinner } from '../components/ui';
 import { Logo, APP_NAME } from '../components/Logo';
 
@@ -32,8 +32,10 @@ export function Login() {
     return true;
   };
 
-  const signInBadge = async (value: string) => {
-    if (busy) return;
+  const signInBadge = async (raw: string) => {
+    const value = cleanBadge(raw);
+    if (busy || !value) return;
+    clearTimeout(idleTimer.current);
     setErr('');
     if (!checkServer()) return;
     setBusy('badge');
@@ -47,14 +49,37 @@ export function Login() {
     }
   };
 
-  // A scan works anywhere on this screen — even if the cursor is in the name or password box.
-  useBadgeScanner((value, typedInto) => {
-    if (typedInto === nameRef.current) setName((v) => (v.endsWith(value) ? v.slice(0, -value.length) : v));
-    if (typedInto === pwRef.current) setPw((v) => (v.endsWith(value) ? v.slice(0, -value.length) : v));
-    setBadge(value);
-    setWelcome('');
-    signInBadge(value);
-  }, badgeOn && !busy);
+  // A scan works anywhere on this screen: with nothing focused it goes into the badge box;
+  // a scanner burst that lands in the name or password box is moved over to the badge.
+  const badgeVal = useRef('');
+  badgeVal.current = badge;
+  useBadgeCapture({
+    enabled: badgeOn && !busy,
+    badgeInput: badgeRef,
+    appendToBadge: (ch) => setBadge((v) => (v + ch).slice(0, 40)),
+    submitBadge: () => signInBadge(badgeVal.current),
+    onScanIntoField: (value, field) => {
+      if (field === nameRef.current) setName((v) => (v.endsWith(value) ? v.slice(0, -value.length) : v));
+      if (field === pwRef.current) setPw((v) => (v.endsWith(value) ? v.slice(0, -value.length) : v));
+      setBadge(value); setWelcome(''); signInBadge(value);
+    },
+  });
+
+  // Scanners set up without an Enter at the end: if the whole ID arrived as one fast burst, sign in after a short pause.
+  const keyTimes = useRef<number[]>([]);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const onBadgeKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key.length !== 1) { if (e.key !== 'Shift') keyTimes.current = []; return; }
+    const now = performance.now();
+    const kt = keyTimes.current;
+    if (kt.length && now - kt[kt.length - 1] > 60) keyTimes.current = [];
+    keyTimes.current.push(now);
+    clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => {
+      // only when every character came in scanner-fast (people type much slower) and it filled the box
+      if (keyTimes.current.length >= 3 && keyTimes.current.length >= badgeVal.current.length) signInBadge(badgeVal.current);
+    }, 450);
+  };
 
   const submitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +117,7 @@ export function Login() {
           )}
 
           {badgeOn && (
-            <form className="card card-pad stack badge-card" onSubmit={(e) => { e.preventDefault(); if (badge.trim()) signInBadge(badge.trim()); }} style={{ padding: '1.6rem' }}>
+            <form className="card card-pad stack badge-card" onSubmit={(e) => { e.preventDefault(); signInBadge(badgeRef.current?.value ?? badge); /* read the box itself so the full scan is used */ }} style={{ padding: '1.6rem' }}>
               <div className="row" style={{ gap: '1rem' }}>
                 <div className={`badge-icon ${busy === 'badge' ? 'busy' : ''}`}>{busy === 'badge' ? <Spinner /> : <ScanLine size={34} />}</div>
                 <div>
@@ -102,11 +127,11 @@ export function Login() {
                   </div>
                 </div>
               </div>
-              <Field label="Or type your badge number">
+              <Field label="Or type your badge ID">
                 <div className="row">
-                  <input ref={badgeRef} className="input grow mono" value={badge} onChange={(e) => setBadge(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                    inputMode="numeric" autoComplete="off" autoFocus placeholder="e.g. 10452" aria-label="Badge number" style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
-                  <button className="btn primary lg" disabled={!!busy || badge.length < 2}><LogIn size={20} />Go</button>
+                  <input ref={badgeRef} className="input grow mono" value={badge} onChange={(e) => setBadge(e.target.value.slice(0, 40))} onKeyDown={onBadgeKey}
+                    autoComplete="off" autoCapitalize="off" spellCheck={false} autoFocus placeholder="e.g. 7A:018" aria-label="Badge number" style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
+                  <button className="btn primary lg" disabled={!!busy || !badge.trim()}><LogIn size={20} />Go</button>
                 </div>
               </Field>
             </form>
