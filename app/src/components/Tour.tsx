@@ -22,12 +22,14 @@ export function startTour(asRole?: Role) { window.dispatchEvent(new CustomEvent(
 function steps(name: string): Step[] {
   return [
     { route: '/', title: t('Welcome, {name}! 👋', { name }), body: rich('This quick tour shows you around — it takes about two minutes. Use **Next** and **Back**, or **Skip** any time. You can replay it later from the **Help** page.') },
-    { route: '/', target: 'nav', title: t('The menu'), body: rich('Everything lives here: **Parts**, **Order Guides**, **PMs**, **Hot Knives**, **Rollers**, **Sonic Welders**, **Downtime** and **Crushed Cores**. Reports, labels and more are under **More tools**. Red and orange numbers mean something needs attention. On a phone, tap **More** at the bottom.') },
+    { route: '/', target: 'nav', title: t('The menu'), body: rich('Everything lives here: **Shift Notes**, **Parts**, **Order Guides**, **PMs**, **Hot Knives**, **Rollers**, **Sonic Welders**, **Downtime** and **Crushed Cores**. Reports, labels and more are under **More tools**. Red and orange numbers mean something needs attention. On a phone, tap **More** at the bottom.') },
     { route: '/', target: 'search', title: t('Search anything'), body: rich('Type a part name, part number, manufacturer, machine, or a knife / roller tag. Results show as you type. Shortcut: press **/** on the keyboard.') },
     { route: '/', target: 'live', title: t('Always live'), body: rich("The green **Live** dot means you're connected. Changes from anyone show up on every screen instantly — no refreshing. If the internet drops, keep working; it syncs when it's back.") },
     { route: '/', target: 'alerts', title: t('Alerts'), body: rich('The bell shows parts that are **out of stock** or **running low**, PMs that are due, and other notices.') },
     { route: '/', target: 'theme', title: t('Light or dark'), body: rich('Switch between dark and light mode here. Text size, language (English / Español) and your profile picture are in **My settings** — click your name at the bottom-left.') },
     { route: '/', target: 'tiles', title: t('Your dashboard'), body: rich("A quick overview: what's out, what's low, PMs due and open orders. Click any box to jump straight to it.") },
+    { route: '/', target: 'quick-actions', editorOnly: true, title: t('Quick buttons'), body: rich('The jobs you do most, one tap away: take a part, log a PM or downtime, a crushed core, a shift note, and more.') },
+    { route: '/notes', target: 'notes-add', editorOnly: true, title: t('Shift notes'), body: rich('Leave a note for the next shift. Tick **Needs follow-up** if something still has to be done; it stays orange until someone clicks **Mark done**. Messages from admins (announcements) show as a coloured bar at the top of every page.') },
     { route: '/parts', target: 'status-chips', title: t('Parts & stock colors'), body: <>{rich('**Green** = in stock · **Orange** = running low · **Red** = order now / out.')} {t('Tap a button to show only those parts.')}</> },
     { route: '/parts', target: 'parts-list', title: t('Every part in one place'), body: rich('Click a column heading to sort. Click a part to see its photo, details, order link and full history. **Take** and **Add** change the stock count and log who did it.') },
     { route: '/parts', target: 'add-part', editorOnly: true, title: t('Add a part'), body: rich('Fill in the name, number and manufacturer — the order link builds itself for most suppliers. Add a photo from the PC or take one with your phone.') },
@@ -130,9 +132,10 @@ function TourStep({ step, index, total, onBack, onNext, onSkip }: { step: Step; 
     // put the card below the highlight if there's room, otherwise above, otherwise beside
     const below = rect.bottom + pad + 16, above = rect.top - pad - 16;
     const left = Math.min(Math.max(12, rect.left + rect.width / 2 - cardW / 2), vw - cardW - 12);
-    if (vh - below > 240) cardStyle = { top: below, left };
-    else if (above > 240) cardStyle = { bottom: vh - above, left };
-    else cardStyle = { top: Math.max(12, Math.min(rect.top, vh - 300)), left: rect.right + cardW + 24 < vw ? rect.right + 20 : Math.max(12, rect.left - cardW - 20) };
+    // need room for the whole card (text + Next button); otherwise go above, or beside the highlight
+    if (vh - below > 330) cardStyle = { top: below, left, maxHeight: vh - below - 12 };
+    else if (above > 330) cardStyle = { bottom: vh - above, left, maxHeight: above - 12 };
+    else cardStyle = { top: Math.max(12, Math.min(rect.top, vh - 360)), maxHeight: vh - Math.max(12, Math.min(rect.top, vh - 360)) - 12, left: rect.right + cardW + 24 < vw ? rect.right + 20 : Math.max(12, rect.left - cardW - 20) };
   } else if (rect) {
     cardStyle = { left: 12, right: 12, ...(rect.top > vh / 2 ? { top: 12 } : { bottom: 12 }) }; // phones: card at top/bottom, away from the highlight
   } else {

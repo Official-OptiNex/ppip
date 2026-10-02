@@ -16,19 +16,22 @@ import { plural, t } from '../lib/i18n';
 import { rich } from '../components/ui';
 import { Avatar } from '../components/ui';
 import { ImagePicker } from '../components/ImagePicker';
+import { AnnouncementsAdmin } from '../components/Announcements';
+import { IDLE_DEFAULT } from '../components/IdleLogout';
 
-type Tab = 'users' | 'mechanics' | 'system' | 'backups' | 'settings' | 'print';
+type Tab = 'users' | 'announcements' | 'mechanics' | 'system' | 'backups' | 'settings' | 'print';
 
 export function AdminPage({ tab: tabArg }: { tab?: string }) {
   const isAdmin = useIsAdmin();
-  const tab = (isAdmin ? (['users', 'mechanics', 'system', 'backups', 'settings', 'print'].includes(tabArg || '') ? tabArg : 'users') : 'print') as Tab;
+  const tab = (isAdmin ? (['users', 'announcements', 'mechanics', 'system', 'backups', 'settings', 'print'].includes(tabArg || '') ? tabArg : 'users') : 'print') as Tab;
   return (
     <div>
       <div className="page-head"><div><h1>{t(isAdmin ? 'Admin' : 'Print layout')}</h1><div className="sub">{t(isAdmin ? 'Accounts, storage, backups and app settings.' : 'Change how printed order guides look.')}</div></div></div>
       {isAdmin && <Tabs value={tab} onChange={(v) => navigate(`/admin/${v}`, true)} tabs={[
-        { id: 'users', label: 'Users' }, { id: 'mechanics', label: 'Mechanics & shifts' }, { id: 'system', label: 'Storage & usage' }, { id: 'backups', label: 'Backups' }, { id: 'settings', label: 'Settings' }, { id: 'print', label: 'Print layout' },
+        { id: 'users', label: 'Users' }, { id: 'announcements', label: 'Announcements' }, { id: 'mechanics', label: 'Mechanics & shifts' }, { id: 'system', label: 'Storage & usage' }, { id: 'backups', label: 'Backups' }, { id: 'settings', label: 'Settings' }, { id: 'print', label: 'Print layout' },
       ]} />}
       {tab === 'users' && <UsersTab />}
+      {tab === 'announcements' && <AnnouncementsAdmin />}
       {tab === 'mechanics' && <MechanicsTab />}
       {tab === 'system' && <SystemTab />}
       {tab === 'backups' && <BackupsTab />}
@@ -428,8 +431,8 @@ function SettingsTab() {
   const save = async () => {
     setBusy(true);
     try {
-      const { companyName, department, weeklyReportDay, currency, publicUrl, badgeLogin } = d;
-      await saveDoc('settings', 'app', { companyName, department, weeklyReportDay, currency, publicUrl, badgeLogin: badgeLogin !== false });
+      const { companyName, department, weeklyReportDay, currency, publicUrl, badgeLogin, idleLogoutMin } = d;
+      await saveDoc('settings', 'app', { companyName, department, weeklyReportDay, currency, publicUrl, badgeLogin: badgeLogin !== false, idleLogoutMin: idleLogoutMin ?? IDLE_DEFAULT });
       toast(t('Settings saved'));
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
@@ -451,6 +454,12 @@ function SettingsTab() {
           <label className="check"><input type="checkbox" checked={d.badgeLogin !== false} onChange={(e) => set('badgeLogin', e.target.checked)} />{t('Allow badge sign-in (scan an employee badge to sign in — no password)')}</label>
           <div className="small muted">{t('Anyone holding a linked badge can sign in to that account, so keep this on only for computers in the plant. Badge numbers are set under Users.')}</div>
         </div>
+        <Field label="Sign out automatically" hint="When nobody touches the screen for this long, it signs out so the next person can't use the wrong account. A warning shows 1 minute before.">
+          <select className="input" value={d.idleLogoutMin ?? IDLE_DEFAULT} onChange={(e) => set('idleLogoutMin', Number(e.target.value))} data-testid="idle-setting">
+            {[5, 10, 15, 30, 60, 120].map((m) => <option key={m} value={m}>{t('After {n} minutes of no activity', { n: m })}</option>)}
+            <option value={0}>{t('Never (stay signed in)')}</option>
+          </select>
+        </Field>
       </div>
       <p className="muted">{t('Categories, locations and units are edited under')} <a href="#/suppliers/lists">{t('Suppliers & Lists → Dropdown lists')}</a>.</p>
       <div><button className="btn primary lg" onClick={save} disabled={busy}><Save />{t('Save settings')}</button></div>

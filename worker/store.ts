@@ -2,8 +2,8 @@
 // Every change is broadcast to all connected screens over WebSockets so the app updates live.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  DEFAULT_SETTINGS, DOC_KINDS, FIELD_SPECS, ROLES, SEED_MANUFACTURERS, SEED_VENDORS, stockStatus, EQUIPMENT_LABEL,
-  type DocKind, type Equipment, type Machine, type Part, type PmLog, type PublicUser, type Role, type StockStatus, type UserPrefs,
+  DEFAULT_SETTINGS, DOC_KINDS, FIELD_SPECS, ROLES, SEED_MANUFACTURERS, SEED_VENDORS, stockStatus, EQUIPMENT_LABEL, announcementLive,
+  type Announcement, type DocKind, type Equipment, type Machine, type Part, type PmLog, type PublicUser, type Role, type StockStatus, type UserPrefs,
 } from '../shared/types';
 import { demoData } from './demo';
 import { fmtDay, machinePmState } from '../shared/pm';
@@ -379,7 +379,13 @@ export class Store extends DurableObject<Env> {
 
     // ---- public endpoints
     if (p === '/health') return json({ ok: true, time: Date.now() });
-    if (p === '/login-info' && m === 'GET') { const s = this.settings(); return json({ badgeLogin: s.badgeLogin !== false, companyName: s.companyName || '' }); }
+    if (p === '/login-info' && m === 'GET') {
+      const s = this.settings();
+      // announcements marked "show on the sign-in screen" (only the text, nothing else)
+      const announcements = this.allDocs<Announcement>('announcements').filter((a) => a.showOnLogin && (a.audience || 'all') === 'all' && announcementLive(a, undefined)) // public screen: only messages for everyone
+        .map((a) => ({ id: a.id, title: a.title, body: a.body || '', titleEs: a.titleEs || '', bodyEs: a.bodyEs || '', level: a.level || 'info' }));
+      return json({ badgeLogin: s.badgeLogin !== false, companyName: s.companyName || '', announcements });
+    }
     if (p === '/login' && m === 'POST') return this.login(req);
     if (seg[0] === 'images' && seg[1] && m === 'GET') return this.getImage(seg[1], url.searchParams.has('thumb'));
     if (seg[0] === 'm' && seg[1]) { // phone upload page endpoints (the random code is the credential)
@@ -577,7 +583,7 @@ export class Store extends DurableObject<Env> {
   async upsert(c: Ctx, kind: DocKind, id: string, patch: Record<string, unknown>) {
     // editors may change the printed order-guide layout; everything else in settings is admin-only
     const printOnly = kind === 'settings' && Object.keys(patch || {}).every((k) => k === 'printTemplate');
-    const u = this.need(c, (kind === 'settings' && !printOnly) || kind === 'mechanics' ? 'admin' : 'editor');
+    const u = this.need(c, (kind === 'settings' && !printOnly) || kind === 'mechanics' || kind === 'announcements' ? 'admin' : 'editor');
     if (kind === 'settings') id = 'app';
     if (!/^[\w-]{1,64}$/.test(id)) throw new HttpError(400, 'Invalid id.');
     return this.upsertDoc(u, kind, id, patch);
@@ -589,7 +595,7 @@ export class Store extends DurableObject<Env> {
     const changes = clean(kind, patch);
     const doc: Record<string, unknown> = { ...(existing || {}), ...changes, id, updatedAt: now, updatedBy: u?.name ?? 'System', createdAt: existing?.createdAt ?? now };
 
-    if (kind !== 'settings' && kind !== 'orders' && kind !== 'equipment' && kind !== 'pms' && kind !== 'downtime' && kind !== 'cores' && !String(doc.name ?? '').trim()) throw new HttpError(400, 'Name is required.');
+    if (kind !== 'settings' && kind !== 'orders' && kind !== 'equipment' && kind !== 'pms' && kind !== 'downtime' && kind !== 'cores' && kind !== 'announcements' && kind !== 'notes' && !String(doc.name ?? '').trim()) throw new HttpError(400, 'Name is required.');
     if (kind === 'pms') {
       if (!String(doc.machine ?? '').trim()) throw new HttpError(400, 'Choose a machine.');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(doc.date ?? ''))) throw new HttpError(400, 'Enter the date the PM was done.');
@@ -615,6 +621,20 @@ export class Store extends DurableObject<Env> {
     if (kind === 'cores') {
       if (!String(doc.tag ?? '').trim()) throw new HttpError(400, 'Enter the tag number.');
       if (!doc.at) doc.at = now;
+    }
+    if (kind === 'announcements') {
+      if (!String(doc.title ?? '').trim()) throw new HttpError(400, 'Write the announcement.');
+      if (!['info', 'warn', 'urgent', 'good'].includes(String(doc.level))) doc.level = 'info';
+      if (!['all', 'viewer', 'editor', 'admin'].includes(String(doc.audience))) doc.audience = 'all';
+      if (doc.active == null) doc.active = true;
+      if (doc.dismissible == null) doc.dismissible = true;
+      if (!existing) doc.author = u?.name || '';
+    }
+    if (kind === 'notes') {
+      if (!String(doc.text ?? '').trim()) throw new HttpError(400, 'Write the note.');
+      if (!existing) doc.author = u?.name || '';
+      if (doc.done && !existing?.done) { doc.doneBy = u?.name || ''; doc.doneAt = now; }
+      if (!doc.done) { doc.doneBy = ''; doc.doneAt = null; }
     }
     if (kind === 'orders') {
       if (!Array.isArray(doc.items)) doc.items = [];
@@ -658,6 +678,9 @@ export class Store extends DurableObject<Env> {
       const label = (kind === 'pms' ? `${doc.type === 'monthly' ? 'Monthly' : 'Weekly'} PM on ${doc.machine} (${doc.date})${doc.doneBy ? ` by ${doc.doneBy}` : ''}`
         : kind === 'downtime' ? `${doc.welder ? `${doc.welder} (${doc.machine})` : doc.machine}: ${String(doc.problem).slice(0, 80)}${doc.minutes ? ` — ${doc.minutes} min` : ''}`
           : kind === 'cores' ? `tag ${doc.tag}${doc.machine ? ` on ${doc.machine}` : ''}`
+            : kind === 'notes' ? `${doc.machine ? `${doc.machine}: ` : ''}${String(doc.text).slice(0, 80)}${doc.done ? ' (done)' : ''}`
+            // the activity feed is seen by everyone, so don't leak the text of a targeted announcement
+            : kind === 'announcements' && doc.audience !== 'all' ? `for ${doc.audience === 'admin' ? 'admins' : doc.audience === 'editor' ? 'editors and admins' : 'viewers'}`
             : doc.name || doc.tag || doc.title || id) as string;
       const summary = existing ? `Updated ${singular(kind)} “${label}”` : `Added ${singular(kind)} “${label}”`;
       this.log(u, existing ? 'update' : 'create', kind, id, summary + (kind === 'orders' ? ` (${doc.number})` : ''));
@@ -704,7 +727,7 @@ export class Store extends DurableObject<Env> {
   }
 
   remove(c: Ctx, kind: DocKind, id: string) {
-    const u = this.need(c, kind === 'mechanics' ? 'admin' : 'editor');
+    const u = this.need(c, kind === 'mechanics' || kind === 'announcements' ? 'admin' : 'editor');
     if (kind === 'settings') throw new HttpError(400, 'Settings cannot be deleted.');
     const existing = this.getDoc<Record<string, unknown>>(kind, id);
     if (!existing) return { ok: true };
@@ -712,7 +735,7 @@ export class Store extends DurableObject<Env> {
     this.sql.exec(`DELETE FROM docs WHERE kind=? AND id=?`, kind, id);
     // the photo is kept for a few days (daily cleanup removes unused photos) so Undo can bring the part back with it
     this.broadcast({ t: 'delete', kind, id });
-    this.log(u, 'delete', kind, id, `Deleted ${singular(kind)} “${kind === 'pms' ? `${existing.type} PM on ${existing.machine} (${existing.date})` : existing.name || existing.tag || existing.title || id}”`);
+    this.log(u, 'delete', kind, id, `Deleted ${singular(kind)} “${kind === 'announcements' && existing.audience && existing.audience !== 'all' ? 'targeted message' : kind === 'pms' ? `${existing.type} PM on ${existing.machine} (${existing.date})` : existing.name || existing.tag || existing.title || (existing.text ? String(existing.text).slice(0, 60) : '') || id}”`);
     return { ok: true };
   }
 
@@ -1233,7 +1256,9 @@ export class Store extends DurableObject<Env> {
         for (const doc of d.docs[k] || []) {
           // reuse built-in suppliers / machines with the same name instead of duplicating them
           const existingId = typeof doc.name === 'string' ? byName.get(doc.name.toLowerCase()) : undefined;
-          this.upsertDoc(u, k, existingId || (doc.id as string), { ...doc, id: undefined }, { quiet: true });
+          const saved = this.upsertDoc(u, k, existingId || (doc.id as string), { ...doc, id: undefined }, { quiet: true });
+          // keep the sample note's own author / time instead of "you, just now"
+          if (k === 'notes' && saved) this.putDoc(k, { ...saved, author: doc.author, createdAt: doc.createdAt, doneBy: doc.doneBy || '', doneAt: doc.doneAt || null });
         }
       }
       for (const mv of d.movements) {
@@ -1315,5 +1340,5 @@ function normBadge(raw: string): string | null {
 }
 
 function singular(kind: string) {
-  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide', pms: 'PM', mechanics: 'mechanic', welders: 'sonic welder', downtime: 'downtime entry', cores: 'crushed core' } as Record<string, string>)[kind] || kind;
+  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide', pms: 'PM', mechanics: 'mechanic', welders: 'sonic welder', downtime: 'downtime entry', cores: 'crushed core', announcements: 'announcement', notes: 'shift note' } as Record<string, string>)[kind] || kind;
 }

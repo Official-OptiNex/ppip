@@ -6,6 +6,9 @@ import { cleanBadge, useBadgeCapture } from '../lib/badge';
 import { Field, Spinner } from '../components/ui';
 import { Logo, APP_NAME } from '../components/Logo';
 import { LangSwitch } from '../components/LangSwitch';
+import { AnnouncementBanner } from '../components/Announcements';
+import { IDLE_FLAG } from '../components/IdleLogout';
+import type { Announcement } from '../../../shared/types';
 import { t } from '../lib/i18n';
 
 export function Login() {
@@ -18,13 +21,15 @@ export function Login() {
   const [err, setErr] = useState('');
   const [server, setServer] = useState(serverUrl());
   const [badgeOn, setBadgeOn] = useState(true);
+  const [news, setNews] = useState<Announcement[]>([]);
+  const [idleOut] = useState(() => { try { const v = sessionStorage.getItem(IDLE_FLAG); sessionStorage.removeItem(IDLE_FLAG); return Number(v) || 0; } catch { return 0; } });
   const badgeRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const pwRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isFileMode && !serverUrl()) return;
-    api<{ badgeLogin: boolean }>('/login-info', { auth: false }).then((r) => setBadgeOn(r.badgeLogin)).catch(() => {});
+    api<{ badgeLogin: boolean; announcements?: Announcement[] }>('/login-info', { auth: false }).then((r) => { setBadgeOn(r.badgeLogin); setNews(r.announcements || []); }).catch(() => {});
   }, []);
 
   const checkServer = () => {
@@ -111,6 +116,8 @@ export function Login() {
         <div className="login-card stack">
           <div className="row mobile-login-brand" style={{ gap: '0.8rem', justifyContent: 'center' }}><Logo size={48} /><b style={{ fontSize: '1.4rem' }}>{APP_NAME}</b></div>
           <LangSwitch />
+          {idleOut > 0 && <div className="banner info" role="status" data-testid="idle-out">{t('You were signed out after {n} minutes with no activity. Scan your badge or sign in again.', { n: idleOut })}</div>}
+          {news.map((a) => <AnnouncementBanner key={a.id} a={a} />)}
           {isFileMode && (
             <div className="card card-pad">
               <Field label={<span className="row" style={{ gap: 6 }}><Server size={16} />{t('Server address')}</span>} hint="Running from USB. This is the web address of your Process Engineer site.">

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Pencil, Trash2, Download, Cylinder } from 'lucide-react';
 import type { CrushedCore } from '../../../shared/types';
 import { deleteDoc, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
@@ -13,10 +13,12 @@ const DAY = 86_400_000;
 export function CoresPage({ query }: { query: URLSearchParams }) {
   const all = useStore((s) => s.docs.cores);
   const canEdit = useCanEdit();
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(() => query.get('q') || '');
+  useEffect(() => { const v = query.get('q'); if (v != null) { setQ(v); setQuery({ q: null }); } }, [query]); // from the top search box
   const [editing, setEditing] = useState<CrushedCore | 'new' | null>(null);
   const period = query.get('period') || '30';
   const machine = query.get('machine') || '';
+  useEffect(() => { if (query.get('new') != null && canEdit) { setEditing('new'); setQuery({ new: null }); } }, [query, canEdit]);
 
   const items = useMemo(() => Object.values(all).sort((a, b) => b.at - a.at), [all]);
   const from = period === 'all' ? 0 : Date.now() - Number(period) * DAY;

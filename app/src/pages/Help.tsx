@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import {
   Undo2, IdCard, Menu, ShoppingCart, GraduationCap, Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck,
   Smartphone, Search, Flame, Printer, Wifi, Usb, AudioWaveform, Timer, Cylinder, Languages, Camera, Type, Tag, Scissors, Lock, Eye, History, Download,
-  HelpCircle, Plus, Trash2, LogIn, KeyRound, ChevronDown, ClipboardList, PackageCheck, Hourglass, Factory,
+  HelpCircle, Plus, Trash2, LogIn, LogOut, KeyRound, ChevronDown, ClipboardList, PackageCheck, Hourglass, Factory, NotebookPen, Flag, Megaphone, LayoutDashboard,
 } from 'lucide-react';
 import { DEFAULT_WEEKLY_DAYS } from '../../../shared/pm';
 import { startTour } from '../components/Tour';
@@ -19,10 +19,20 @@ function sections(): Section[] {
     {
       id: 'start', title: 'Getting started', icon: <LogIn />, topics: [
         { icon: <IdCard />, title: 'Sign in with your badge', steps: ['At the sign-in screen, just scan your employee badge — no clicking needed.', 'First time: sign in with your name and password, click **Add my badge** at the top of the screen and scan it once.'] },
+        { icon: <LogOut />, title: 'Sign out when you are done', text: 'Click **Sign out** at the top-right of every page. If nobody uses the screen for a while (15 minutes unless an admin changed it), it signs out by itself. A warning shows 1 minute before — click **Stay signed in** to keep working.' },
         { icon: <Languages />, title: 'English or Spanish', steps: ['Pick **English** or **Español** at the top of the sign-in screen.', 'After you sign in, change it any time in **My settings** (click your name, bottom-left). It is saved to your account on every computer.'] },
         { icon: <Type />, title: 'Make the text bigger', steps: ['Click your name (bottom-left) → **My settings**.', 'Under **Text size** pick **Large** or **Extra large**.'] },
         { icon: <Camera />, title: 'Add your profile picture', steps: ['Click your name (bottom-left) → **My settings** → **Profile picture**.', 'Click **Upload from this PC**, or **Take photo with phone** and scan the QR code with your phone camera.'] },
+        { icon: <LayoutDashboard />, title: 'Quick buttons on the home page', text: 'The big buttons at the top of the **Dashboard** open the most common jobs in one tap: take a part, receive parts, log a PM, log downtime, crushed core, shift note, order guide and labels.' },
         { icon: <GraduationCap />, title: 'Take the guided tour', text: 'A 2-minute walk through the app. Click **Take the guided tour** at the top of this page any time.' },
+      ],
+    },
+    {
+      id: 'team', title: 'Shift notes & announcements', icon: <NotebookPen />, topics: [
+        { icon: <NotebookPen />, title: 'Leave a note for the next shift', steps: ['Open **Shift Notes** (in the menu, or **Shift note** on the Dashboard).', 'Type what the next shift needs to know. Pick the machine and shift if you like.', 'Click **Post note**. Everyone sees it right away.'] },
+        { icon: <Flag />, title: 'Something still needs doing', text: 'Tick **Needs follow-up** when you post the note. It shows in orange with a count in the menu until someone clicks **Mark done**.' },
+        { icon: <Megaphone />, title: 'Announcements', text: 'Messages from an admin show as a coloured bar at the top of every page. Click **Hide** once you have read it. Red ones are urgent.' },
+        { icon: <Megaphone />, title: 'Post an announcement (admins)', steps: ['**Admin** → **Announcements** → **New announcement**.', 'Pick a ready-made example or write your own headline and message. Choose the colour and who sees it.', 'Optional: set when it starts and ends, make it pop up, or show it on the sign-in screen. Click **Post announcement**.'] },
       ],
     },
     {

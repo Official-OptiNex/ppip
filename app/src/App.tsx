@@ -6,6 +6,8 @@ import { ConfirmHost, Toasts, Spinner } from './components/ui';
 import { TourHost } from './components/Tour';
 import { UndoBar } from './components/UndoBar';
 import { FirstLanguagePrompt } from './components/LangSwitch';
+import { AnnouncementPopup } from './components/Announcements';
+import { IdleLogout } from './components/IdleLogout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { PartsPage } from './pages/Parts';
@@ -17,6 +19,7 @@ const Pms = lazy(() => import('./pages/Pms').then((m) => ({ default: m.PmsPage }
 const Equipment = lazy(() => import('./pages/Equipment').then((m) => ({ default: m.EquipmentPage })));
 const Downtime = lazy(() => import('./pages/Downtime').then((m) => ({ default: m.DowntimePage })));
 const Welders = lazy(() => import('./pages/Welders').then((m) => ({ default: m.WeldersPage })));
+const Notes = lazy(() => import('./pages/Notes').then((m) => ({ default: m.NotesPage })));
 const Cores = lazy(() => import('./pages/Cores').then((m) => ({ default: m.CoresPage })));
 const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.AnalyticsPage })));
 const Reports = lazy(() => import('./pages/Reports').then((m) => ({ default: m.ReportsPage })));
@@ -55,6 +58,7 @@ export function App() {
     case 'rollers': page = <Equipment key="roller" type="roller" query={route.query} />; break;
     case 'downtime': page = <Downtime query={route.query} />; break;
     case 'welders': page = <Welders tab={b} query={route.query} />; break;
+    case 'notes': page = <Notes query={route.query} />; break;
     case 'cores': page = <Cores query={route.query} />; break;
     case 'analytics': page = <Analytics />; break;
     case 'reports': page = <Reports query={route.query} />; break;
@@ -76,6 +80,8 @@ export function App() {
       <ConfirmHost />
       <FirstLanguagePrompt />
       <TourHost />
+      <AnnouncementPopup />
+      <IdleLogout />
       <UndoBar />
     </>
   );
