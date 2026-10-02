@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  LayoutDashboard, Package, ClipboardList, Flame, CircleDot, BarChart3, FileText, Truck, Tag, ArrowLeftRight, History, ShieldCheck,
+  LayoutDashboard, Package, ClipboardList, Flame, CircleDot, BarChart3, FileText, Truck, Tag, ArrowLeftRight, History, ShieldCheck, AudioWaveform, Timer, Cylinder,
   HelpCircle, ChevronDown, ShoppingCart, Wrench, Sun, Moon, Bell, Menu as MenuIcon, LogOut, UserCircle2, Search, Plus, X, Wifi, WifiOff, AlertTriangle, XCircle, CheckCircle2, Info, MoreHorizontal,
 } from 'lucide-react';
 import { useStore, logout, markNotificationsSeen, can } from '../lib/store';
@@ -11,6 +11,7 @@ import { isFileMode, safeGet, safeSet } from '../lib/api';
 import { Thumb } from './ui';
 import { QuickLogBubble } from './QuickLog';
 import { Logo, APP_NAME } from './Logo';
+import { EQUIPMENT_LABEL } from '../../../shared/types';
 import { BadgeNotice } from './BadgeSetup';
 import type { Part, Equipment, OrderGuide } from '../../../shared/types';
 
@@ -23,6 +24,9 @@ const NAV_MAIN: NavItem[] = [
   { to: '/pms', label: 'PMs', icon: <Wrench size={22} /> },
   { to: '/knives', label: 'Hot Knives', icon: <Flame size={22} /> },
   { to: '/rollers', label: 'Rollers', icon: <CircleDot size={22} /> },
+  { to: '/welders', label: 'Sonic Welders', icon: <AudioWaveform size={22} /> },
+  { to: '/downtime', label: 'Downtime', icon: <Timer size={22} /> },
+  { to: '/cores', label: 'Crushed Cores', icon: <Cylinder size={22} /> },
 ];
 const NAV_MORE: NavItem[] = [
   { to: '/reports', label: 'Weekly Report', icon: <FileText size={21} /> },
@@ -265,13 +269,13 @@ function GlobalSearch() {
     if (!q.trim()) return { parts: [] as Part[], eq: [] as Equipment[], orders: [] as OrderGuide[] };
     return {
       parts: Object.values(parts).filter((p) => matches(q, p.name, p.partNumber, p.manufacturer, p.vendorPartNumber, p.location, p.category, p.description, p.machines?.join(' '))).slice(0, 8),
-      eq: Object.values(equipment).filter((e) => matches(q, e.tag, e.machine, e.position, e.type === 'knife' ? 'hot knife' : 'roller', e.notes)).slice(0, 5),
+      eq: Object.values(equipment).filter((e) => matches(q, e.tag, e.machine, e.position, EQUIPMENT_LABEL[e.type].one, e.partNumber, e.notes)).slice(0, 5),
       orders: Object.values(orders).filter((o) => matches(q, o.number, o.title, o.requestedBy, o.items.map((i) => `${i.name} ${i.partNumber}`).join(' '))).slice(0, 4),
     };
   }, [q, parts, equipment, orders]);
   const flat = [
     ...results.parts.map((p) => `/parts/${p.id}`),
-    ...results.eq.map((e) => `/${e.type === 'knife' ? 'knives' : 'rollers'}?open=${e.id}`),
+    ...results.eq.map((e) => `/${EQUIPMENT_LABEL[e.type].route}?open=${e.id}`),
     ...results.orders.map((o) => `/orders/${o.id}`),
   ];
   const go = (to: string) => { navigate(to); setOpen(false); setQ(''); inputRef.current?.blur(); };
@@ -309,12 +313,12 @@ function GlobalSearch() {
               </button>
             );
           })}
-          {results.eq.length > 0 && <div className="search-group">Hot knives & rollers</div>}
+          {results.eq.length > 0 && <div className="search-group">Knives, rollers, horns & anvils</div>}
           {results.eq.map((e) => {
             idx++; const i = idx;
             return (
-              <button key={e.id} className="list-item" style={{ background: active === i ? 'var(--primary-soft)' : undefined }} onMouseEnter={() => setActive(i)} onClick={() => go(`/${e.type === 'knife' ? 'knives' : 'rollers'}?open=${e.id}`)}>
-                <span className="li-icon">{e.type === 'knife' ? <Flame size={19} /> : <CircleDot size={19} />}</span>
+              <button key={e.id} className="list-item" style={{ background: active === i ? 'var(--primary-soft)' : undefined }} onMouseEnter={() => setActive(i)} onClick={() => go(`/${EQUIPMENT_LABEL[e.type].route}?open=${e.id}`)}>
+                <span className="li-icon">{e.type === 'knife' ? <Flame size={19} /> : e.type === 'roller' ? <CircleDot size={19} /> : <AudioWaveform size={19} />}</span>
                 <div className="grow"><b>{e.tag}</b><div className="small muted">{e.machine ? `${e.machine}${e.position ? ` · ${e.position}` : ''}` : e.status}</div></div>
               </button>
             );

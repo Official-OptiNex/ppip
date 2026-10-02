@@ -572,8 +572,10 @@ button.list-item { width: 100%; border-left: 0; border-right: 0; border-top: 0; 
 @media (max-width: 900px) { .mobile-login-brand { display: flex !important; margin-bottom: 0.4rem; } }
 
 /* Undo bar (bottom-left, after every change) */
-.undo-bar { position: fixed; z-index: 150; left: calc(var(--sidebar) + 1.5rem); bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem; width: min(520px, calc(100vw - var(--sidebar) - 16rem)); padding: 0.7rem 0.8rem 0.7rem 1.1rem; background: var(--surface); border: 1px solid var(--border-strong); border-left: 5px solid var(--primary); border-radius: 14px; box-shadow: var(--shadow-lg); animation: pop 0.15s ease-out; }
+.undo-bar { position: fixed; z-index: 95; /* above drawers, below dialogs so it never covers a dialog's buttons */ left: calc(var(--sidebar) + 1.5rem); bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem; width: min(520px, calc(100vw - var(--sidebar) - 16rem)); padding: 0.7rem 0.8rem 0.7rem 1.1rem; background: var(--surface); border: 1px solid var(--border-strong); border-left: 5px solid var(--primary); border-radius: 14px; box-shadow: var(--shadow-lg); animation: pop 0.15s ease-out; }
 .undo-btn { border-color: var(--primary); color: var(--primary); }
 .undo-btn:hover { background: var(--primary-soft); }
 @media (max-width: 960px) { .undo-bar { left: 0.75rem; right: 5.2rem; width: auto; bottom: calc(4.6rem + env(safe-area-inset-bottom)); } }
 @media print { .undo-bar { display: none !important; } }
+.w-sm { width: 7.5rem !important; flex: none; }
+.row.wrap > .input-wrap.grow { flex: 1 1 16rem; min-width: min(16rem, 100%); }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Printer, Download, PackageMinus, PackagePlus, DollarSign, XCircle, AlertTriangle, Flame, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Printer, Download, PackageMinus, PackagePlus, DollarSign, XCircle, AlertTriangle, Flame, Wrench, Timer, Cylinder } from 'lucide-react';
+import { fmtMinutes } from './Downtime';
 import { api, errorMessage } from '../lib/api';
 import { useStore } from '../lib/store';
 import { DAY, fmtDate, fmtDateTime, money, num, setQuery, stockStatus, download, toCSV } from '../lib/util';
@@ -28,6 +29,8 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
   const settings = useStore((s) => s.settings);
   const parts = useStore((s) => s.docs.parts);
   const pms = useStore((s) => s.docs.pms);
+  const downtimeDocs = useStore((s) => s.docs.downtime);
+  const coreDocs = useStore((s) => s.docs.cores);
   const pmStates = usePmStates();
   const lastMove = useStore((s) => s.lastMovementAt);
   const period = (query.get('period') || 'week') as 'week' | 'month';
@@ -51,6 +54,8 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
     setQuery({ start: iso(d) });
   };
   const isCurrent = Date.now() >= start.getTime() && Date.now() < end.getTime();
+  const downtime = useMemo(() => Object.values(downtimeDocs).filter((d) => d.startedAt >= start.getTime() && d.startedAt < end.getTime()).sort((a, b) => a.startedAt - b.startedAt), [downtimeDocs, start.getTime(), end.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cores = useMemo(() => Object.values(coreDocs).filter((c) => c.at >= start.getTime() && c.at < end.getTime()).sort((a, b) => a.at - b.at), [coreDocs, start.getTime(), end.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const now = useMemo(() => {
     const list = Object.values(parts);
@@ -149,6 +154,24 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
               <tbody>
                 {rep.equipment.map((a) => <tr key={a.id}><td>{a.summary}</td><td className="small muted nowrap">{fmtDateTime(a.at)} · {a.userName}</td></tr>)}
               </tbody>
+            </table>
+          )}
+        </Section>
+
+        <Section title={<><Timer size={18} style={{ verticalAlign: -3 }} /> Downtime &amp; glitches{downtime.length ? ` — ${fmtMinutes(downtime.reduce((t, d) => t + (d.minutes || 0), 0))} total` : ''}</>} empty="No downtime logged in this period.">
+          {downtime.length > 0 && (
+            <table className="tbl">
+              <thead><tr><th>When</th><th>Machine</th><th>What happened</th><th className="num">Down</th></tr></thead>
+              <tbody>{downtime.map((d) => <tr key={d.id}><td className="nowrap small">{fmtDateTime(d.startedAt)}</td><td>{d.machine}{d.welder ? ` · ${d.welder}` : ''}</td><td>{d.problem}{d.fix && <div className="small muted">Fix: {d.fix}</div>}</td><td className="num nowrap">{d.minutes != null ? fmtMinutes(d.minutes) : '—'}</td></tr>)}</tbody>
+            </table>
+          )}
+        </Section>
+
+        <Section title={<><Cylinder size={18} style={{ verticalAlign: -3 }} /> Crushed cores{cores.length ? ` — ${cores.length}` : ''}</>} empty="No crushed cores logged in this period.">
+          {cores.length > 0 && (
+            <table className="tbl">
+              <thead><tr><th>When</th><th>Tag #</th><th>Machine</th><th>Notes</th></tr></thead>
+              <tbody>{cores.map((c) => <tr key={c.id}><td className="nowrap small">{fmtDateTime(c.at)}</td><td className="mono"><b>{c.tag}</b></td><td>{c.machine || '—'}</td><td className="small">{c.notes}</td></tr>)}</tbody>
             </table>
           )}
         </Section>

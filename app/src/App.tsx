@@ -14,6 +14,9 @@ const Orders = lazy(() => import('./pages/Orders').then((m) => ({ default: m.Ord
 const OrderPrint = lazy(() => import('./pages/Orders').then((m) => ({ default: m.OrderPrintPage })));
 const Pms = lazy(() => import('./pages/Pms').then((m) => ({ default: m.PmsPage })));
 const Equipment = lazy(() => import('./pages/Equipment').then((m) => ({ default: m.EquipmentPage })));
+const Downtime = lazy(() => import('./pages/Downtime').then((m) => ({ default: m.DowntimePage })));
+const Welders = lazy(() => import('./pages/Welders').then((m) => ({ default: m.WeldersPage })));
+const Cores = lazy(() => import('./pages/Cores').then((m) => ({ default: m.CoresPage })));
 const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.AnalyticsPage })));
 const Reports = lazy(() => import('./pages/Reports').then((m) => ({ default: m.ReportsPage })));
 const Suppliers = lazy(() => import('./pages/Suppliers').then((m) => ({ default: m.SuppliersPage })));
@@ -49,6 +52,9 @@ export function App() {
     case 'pms': page = <Pms tab={b} query={route.query} />; break;
     case 'knives': page = <Equipment key="knife" type="knife" query={route.query} />; break;
     case 'rollers': page = <Equipment key="roller" type="roller" query={route.query} />; break;
+    case 'downtime': page = <Downtime query={route.query} />; break;
+    case 'welders': page = <Welders tab={b} query={route.query} />; break;
+    case 'cores': page = <Cores query={route.query} />; break;
     case 'analytics': page = <Analytics />; break;
     case 'reports': page = <Reports query={route.query} />; break;
     case 'suppliers': page = <Suppliers tab={b} />; break;
