@@ -6,6 +6,8 @@ import { Undo2, Redo2 } from 'lucide-react';
 import { fmtDateTime, useDebounced } from '../lib/util';
 import { SearchInput, Spinner, Empty } from '../components/ui';
 import type { Activity } from '../../../shared/types';
+import { t } from '../lib/i18n';
+import { rich } from '../components/ui';
 
 const KINDS: [string, string][] = [['', 'Everything'], ['parts', 'Parts & stock'], ['equipment', 'Knives, rollers, horns, anvils'], ['downtime', 'Downtime'], ['cores', 'Crushed cores'], ['welders', 'Sonic welders'], ['orders', 'Order guides'], ['users', 'Accounts'], ['vendors', 'Suppliers'], ['machines', 'Machines']];
 
@@ -34,10 +36,10 @@ export function ActivityPage() {
 
   return (
     <div>
-      <div className="page-head"><div><h1>Activity log</h1><div className="sub">Every change, who made it and when. Made a mistake? Click <b>Undo</b> next to it (changes can be undone for 30 days).</div></div></div>
+      <div className="page-head"><div><h1>{t('Activity log')}</h1><div className="sub">{rich('Every change, who made it and when. Made a mistake? Click **Undo** next to it (changes can be undone for 30 days).')}</div></div></div>
       <div className="row wrap" style={{ marginBottom: '1rem' }}>
         <SearchInput value={q} onChange={setQ} placeholder="Search activity (part name, person, machine…)" />
-        <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={kind} onChange={(e) => setKind(e.target.value)}>{KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+        <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={kind} onChange={(e) => setKind(e.target.value)} aria-label={t('Show')}>{KINDS.map(([v, l]) => <option key={v} value={v}>{t(l)}</option>)}</select>
       </div>
       <div className="card">
         {!rows ? <div className="card-pad center"><Spinner /></div> : rows.length === 0 ? <Empty title="No activity found" /> : (
@@ -48,15 +50,15 @@ export function ActivityPage() {
               const isRedo = a.action === 'undo';
               const undoBtn = canUndo ? (
                 <button className="btn sm" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); if (await runUndo(a.undoId!, a.summary)) setTimeout(() => load().catch(() => {}), 400); }}
-                  title={isRedo ? 'Redo this' : 'Undo this change'}>{isRedo ? <Redo2 size={16} /> : <Undo2 size={16} />}{isRedo ? 'Redo' : 'Undo'}</button>
-              ) : a.undone ? <span className="pill neutral">{isRedo ? 'Redone' : 'Undone'}</span> : null;
+                  title={isRedo ? t('Redo this') : t('Undo this change')}>{isRedo ? <Redo2 size={16} /> : <Undo2 size={16} />}{isRedo ? t('Redo') : t('Undo')}</button>
+              ) : a.undone ? <span className="pill neutral">{isRedo ? t('Redone') : t('Undone')}</span> : null;
               const body = <><div className="grow"><div>{a.summary}</div><div className="small muted">{a.userName}</div></div><div className="small muted nowrap">{fmtDateTime(a.at)}</div>{undoBtn}</>;
               return link ? <a key={a.id} className="list-item" href={link}>{body}</a> : <div key={a.id} className="list-item">{body}</div>;
             })}
           </div>
         )}
       </div>
-      {rows && more && <div className="center" style={{ marginTop: '1rem' }}><button className="btn" onClick={() => load(rows[rows.length - 1]?.at)}>Load older</button></div>}
+      {rows && more && <div className="center" style={{ marginTop: '1rem' }}><button className="btn" onClick={() => load(rows[rows.length - 1]?.at)}>{t('Load older')}</button></div>}
     </div>
   );
 }

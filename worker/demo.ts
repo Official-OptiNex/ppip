@@ -127,17 +127,35 @@ export function demoData() {
     { id: 'demo-w2', name: 'Welder 2', machine: 'Bag Machine 3', model: 'Branson 2000X 20 kHz' },
     { id: 'demo-w3', name: 'Welder 3', machine: 'Bag Machine 4', model: 'Herrmann HiQ 35 kHz' },
   ];
+  // Each welder holds exactly one horn and one anvil. Build each slot's timeline backwards from today:
+  // the one on it now, then the ones it replaced (handed over the same day they came off).
+  let tagNo = 11;
   for (const type of ['horn', 'anvil'] as const) {
-    for (let i = 0; i < 5; i++) {
-      const installed = i < 3;
-      const e: Equipment = {
-        id: `demo-${type}${i}`, type, tag: `${type === 'horn' ? 'H' : 'A'}-${String(11 + i)}`, status: installed ? 'installed' : i === 3 ? 'spare' : 'repair',
-        machine: installed ? welders[i].name : '', installedAt: installed ? now - Math.floor(rnd() * 60 + 3) * DAY : null,
-        partNumber: type === 'horn' ? `HRN-${2040 + i}` : `ANV-${310 + i}`,
-      };
-      pastStints(e, welders.map((w) => w.name), type === 'horn' ? [60, 200] : [30, 120]);
-      equipment.push(e);
-    }
+    const life: [number, number] = type === 'horn' ? [70, 200] : [35, 120];
+    welders.forEach((w) => {
+      let end = now;
+      for (let k = 0; k < 3; k++) {
+        const len = Math.floor(life[0] + rnd() * (life[1] - life[0])) * (k === 0 ? 0.4 : 1);
+        const start = end - Math.round(len) * DAY;
+        const current = k === 0;
+        const e: Equipment = {
+          id: `demo-${type}${tagNo}`, type, tag: `${type === 'horn' ? 'H' : 'A'}-${tagNo}`,
+          status: current ? 'installed' : k === 1 ? (rnd() < 0.5 ? 'spare' : 'repair') : 'retired',
+          machine: current ? w.name : '', installedAt: current ? start : null,
+          partNumber: type === 'horn' ? `HRN-${2040 + (tagNo % 3)}` : `ANV-${310 + (tagNo % 3)}`,
+          history: [current
+            ? { machine: w.name, installedAt: start }
+            : { machine: w.name, installedAt: start, removedAt: end, reason: k === 2 ? 'Wear' : pick(['Wear', 'Wear', 'Damage', 'Repair / rebuild']), note: k === 2 ? 'Worn face, re-machining not worth it' : '' }],
+          notes: k === 2 ? 'Scrapped' : '',
+        };
+        equipment.push(e);
+        tagNo++;
+        end = start;
+      }
+    });
+    // one ready-to-go spare of each, never installed yet
+    equipment.push({ id: `demo-${type}${tagNo}`, type, tag: `${type === 'horn' ? 'H' : 'A'}-${tagNo}`, status: 'spare', partNumber: type === 'horn' ? 'HRN-2040' : 'ANV-310', notes: 'New, in box' });
+    tagNo++;
   }
 
   // ~2 months of downtime / glitches

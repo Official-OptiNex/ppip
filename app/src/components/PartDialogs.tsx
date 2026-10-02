@@ -5,6 +5,7 @@ import { adjustStock, getState, newId, saveDoc, toast, toastError, useStore } fr
 import { stockStatus, uniqueSorted, navigate } from '../lib/util';
 import { Combobox, Field, Modal, NumberInput, StatusPill, TagInput } from './ui';
 import { ImagePicker } from './ImagePicker';
+import { t } from '../lib/i18n';
 
 type Draft = Partial<Part>;
 
@@ -56,7 +57,7 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
 
   const save = async () => {
     setTried(true);
-    if (!d.name?.trim()) { toast('Please enter a part name', 'danger'); return; }
+    if (!d.name?.trim()) { toast(t('Please enter a part name'), 'danger'); return; }
     setSaving(true);
     try {
       const id = part?.id || newId();
@@ -77,7 +78,7 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
       if (d.vendor && !Object.values(st.docs.vendors).some((m) => m.name.toLowerCase() === d.vendor!.toLowerCase()))
         saveDoc('vendors', newId(), { name: d.vendor, leadTimeDays: d.leadTimeDays }).catch(() => {});
       if (Object.keys(patch).length) await saveDoc('parts', id, patch, `Save part ${d.name}`);
-      toast(isNew ? `Added “${d.name}”` : `Saved “${d.name}”`);
+      toast(isNew ? t('Added “{name}”', { name: d.name }) : t('Saved “{name}”', { name: d.name }));
       onSaved?.(id);
       onClose();
     } catch (e) { toastError(e); } finally { setSaving(false); }
@@ -88,13 +89,13 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
     <Modal title={isNew ? 'Add a part' : `Edit part`} onClose={onClose} size="wide"
       footer={<>
         <span className="left row"><StatusPill status={st} /></span>
-        <button className="btn lg" onClick={onClose}>Cancel</button>
-        <button className="btn primary lg" onClick={save} disabled={saving}><Save size={20} />{saving ? 'Saving…' : isNew ? 'Add part' : 'Save changes'}</button>
+        <button className="btn lg" onClick={onClose}>{t('Cancel')}</button>
+        <button className="btn primary lg" onClick={save} disabled={saving}><Save size={20} />{saving ? t('Saving…') : isNew ? t('Add part') : t('Save changes')}</button>
       </>}>
       <form onSubmit={(e) => { e.preventDefault(); save(); }} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save(); }}>
         <div className="grid-form">
           <Field label="Part name" required className="span-2">
-            <input className={`input ${tried && !d.name?.trim() ? 'invalid' : ''}`} value={d.name || ''} onChange={(e) => set('name', e.target.value)} autoFocus placeholder="e.g. Cartridge heater 1/2&quot; x 6&quot; 500W" />
+            <input className={`input ${tried && !d.name?.trim() ? 'invalid' : ''}`} value={d.name || ''} onChange={(e) => set('name', e.target.value)} autoFocus placeholder={t('e.g. Cartridge heater 1/2" x 6" 500W')} />
           </Field>
           <Field label="Part number">
             <input className="input mono" value={d.partNumber || ''} onChange={(e) => set('partNumber', e.target.value)} placeholder="e.g. 3618K451" />
@@ -109,18 +110,18 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
             <Combobox value={d.location || ''} onChange={(v) => set('location', v)} options={opts.locations} placeholder="e.g. Crib A · Shelf 3" />
           </Field>
           <Field label="Description" className="span-all">
-            <input className="input" value={d.description || ''} onChange={(e) => set('description', e.target.value)} placeholder="Size, voltage, material, what it's for…" />
+            <input className="input" value={d.description || ''} onChange={(e) => set('description', e.target.value)} placeholder={t("Size, voltage, material, what it's for…")} />
           </Field>
         </div>
         {dup && (
           <div className="banner warn" style={{ marginTop: '1rem' }}>
-            <AlertTriangle /> <span className="grow">A part with this part number already exists: <b>{dup.name}</b></span>
-            <button type="button" className="btn sm" onClick={() => { onClose(); navigate(`/parts/${dup.id}`); }}>Open it</button>
+            <AlertTriangle /> <span className="grow">{t('A part with this part number already exists:')} <b>{dup.name}</b></span>
+            <button type="button" className="btn sm" onClick={() => { onClose(); navigate(`/parts/${dup.id}`); }}>{t('Open it')}</button>
           </div>
         )}
 
         <div className="form-section">
-          <h3>Stock</h3>
+          <h3>{t('Stock')}</h3>
           <div className="grid-form">
             <Field label={isNew ? 'How many do we have?' : 'In stock'} hint={isNew ? undefined : 'Use Take / Receive / Count on the part page to change stock.'}>
               <NumberInput value={d.qty ?? 0} onChange={(v) => set('qty', v ?? 0)} min={0} className="mono" />
@@ -128,8 +129,8 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
             <Field label="Reorder at (low)" hint="At or below this = orange">
               <NumberInput value={d.minQty} onChange={(v) => set('minQty', v)} min={0} placeholder="e.g. 2" />
             </Field>
-            <Field label="Order now at (red)" hint={d.orderQty == null ? (orderNowLevel({ minQty: d.minQty }) != null ? `Blank = half the reorder point (${orderNowLevel({ minQty: d.minQty })})` : 'At or below this = red “Order now”') : 'At or below this = red “Order now”'}>
-              <NumberInput value={d.orderQty} onChange={(v) => set('orderQty', v)} min={0} placeholder={orderNowLevel({ minQty: d.minQty }) != null ? `auto: ${orderNowLevel({ minQty: d.minQty })}` : 'e.g. 1'} />
+            <Field label="Order now at (red)" hint={d.orderQty == null && orderNowLevel({ minQty: d.minQty }) != null ? t('Blank = half the reorder point ({n})', { n: orderNowLevel({ minQty: d.minQty }) }) : t('At or below this = red “Order now”')}>
+              <NumberInput value={d.orderQty} onChange={(v) => set('orderQty', v)} min={0} placeholder={orderNowLevel({ minQty: d.minQty }) != null ? t('auto: {n}', { n: orderNowLevel({ minQty: d.minQty }) }) : t('e.g. 1')} />
             </Field>
             <Field label="Stock up to (target)" hint="Used to suggest order qty">
               <NumberInput value={d.maxQty} onChange={(v) => set('maxQty', v)} min={0} placeholder="e.g. 6" />
@@ -138,11 +139,11 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
               <Combobox value={d.unit || ''} onChange={(v) => set('unit', v)} options={opts.units} placeholder="ea" />
             </Field>
           </div>
-          {isNew && d.qty != null && d.qty > 0 && <div className="small muted" style={{ marginTop: 6 }}><Info size={14} style={{ verticalAlign: -2 }} /> Stock for existing parts is changed with the Take / Receive / Count buttons so every change is logged.</div>}
+          {isNew && d.qty != null && d.qty > 0 && <div className="small muted" style={{ marginTop: 6 }}><Info size={14} style={{ verticalAlign: -2 }} /> {t('Stock for existing parts is changed with the Take / Receive / Count buttons so every change is logged.')}</div>}
         </div>
 
         <div className="form-section">
-          <h3>Ordering & supplier</h3>
+          <h3>{t('Ordering & supplier')}</h3>
           <div className="grid-form">
             <Field label="Supplier / vendor" hint="Where you buy it">
               <Combobox value={d.vendor || ''} onChange={(v) => set('vendor', v)} options={opts.vendors} onPick={onVendorPick} placeholder="e.g. McMaster-Carr" />
@@ -157,34 +158,34 @@ export function PartForm({ part, initial, onClose, onSaved }: { part?: Part; ini
               <NumberInput value={d.leadTimeDays} onChange={(v) => set('leadTimeDays', v)} min={0} placeholder="e.g. 3" />
             </Field>
             <Field label="Order page link" className="span-all"
-              hint={autoUrl ? (suggestedUrl ? `Built automatically from the ${findTemplate(d.vendor, d.manufacturer)?.from} link pattern.` : 'Pick a supplier/manufacturer with a link pattern (Suppliers page) to build this automatically, or paste a link.') : 'Custom link.'}>
+              hint={autoUrl ? (suggestedUrl ? t('Built automatically from the {from} link pattern.', { from: findTemplate(d.vendor, d.manufacturer)?.from }) : t('Pick a supplier/manufacturer with a link pattern (Suppliers page) to build this automatically, or paste a link.')) : t('Custom link.')}>
               <div className="row">
                 <input className="input grow" value={effectiveUrl} placeholder="https://…" onChange={(e) => { setAutoUrl(false); set('orderUrl', e.target.value); }} />
-                {!autoUrl && suggestedUrl && <button type="button" className="btn" onClick={() => { setAutoUrl(true); set('orderUrl', ''); }} title="Use automatic link"><Wand2 size={18} />Auto</button>}
-                {effectiveUrl && <a className="btn" href={effectiveUrl} target="_blank" rel="noreferrer" title="Test link"><ExternalLink size={18} /></a>}
+                {!autoUrl && suggestedUrl && <button type="button" className="btn" onClick={() => { setAutoUrl(true); set('orderUrl', ''); }} title={t('Use automatic link')}><Wand2 size={18} />{t('Auto')}</button>}
+                {effectiveUrl && <a className="btn" href={effectiveUrl} target="_blank" rel="noreferrer" title={t('Test link')}><ExternalLink size={18} /></a>}
               </div>
             </Field>
           </div>
         </div>
 
         <div className="form-section">
-          <h3>Where it's used</h3>
+          <h3>{t("Where it's used")}</h3>
           <TagInput values={d.machines || []} onChange={(v) => set('machines', v)} options={opts.machines} placeholder="Add a machine (type and press Enter)" />
         </div>
 
         <div className="form-section">
-          <h3>Photo</h3>
+          <h3>{t('Photo')}</h3>
           <ImagePicker value={d.imageId} onChange={(id) => set('imageId', id ?? '')} label={d.name} />
         </div>
 
         <div className="form-section">
-          <h3>Notes & flags</h3>
+          <h3>{t('Notes & flags')}</h3>
           <Field label="Notes">
-            <textarea className="input" value={d.notes || ''} onChange={(e) => set('notes', e.target.value)} placeholder="Anything useful: alternates, install tips, who to call…" />
+            <textarea className="input" value={d.notes || ''} onChange={(e) => set('notes', e.target.value)} placeholder={t('Anything useful: alternates, install tips, who to call…')} />
           </Field>
           <div className="row wrap" style={{ marginTop: '0.6rem', gap: '1.5rem' }}>
-            <label className="check"><input type="checkbox" checked={!!d.critical} onChange={(e) => set('critical', e.target.checked)} />Critical spare (machine goes down without it)</label>
-            <label className="check"><input type="checkbox" checked={!!d.decommissioned} onChange={(e) => set('decommissioned', e.target.checked)} />Decommissioned — we don't use this anymore</label>
+            <label className="check"><input type="checkbox" checked={!!d.critical} onChange={(e) => set('critical', e.target.checked)} />{t('Critical spare (machine goes down without it)')}</label>
+            <label className="check"><input type="checkbox" checked={!!d.decommissioned} onChange={(e) => set('decommissioned', e.target.checked)} />{t("Decommissioned — we don't use this anymore")}</label>
           </div>
         </div>
       </form>
@@ -214,25 +215,25 @@ export function StockDialog({ part, mode: initialMode, onClose }: { part: Part; 
     setBusy(true);
     try {
       await adjustStock(live, mode, n, mode === 'use' ? machine : undefined, note);
-      toast(mode === 'use' ? `Took ${n} ${unit} — ${after} left` : mode === 'receive' ? `Received ${n} ${unit} — now ${after}` : `Count saved — ${after} ${unit}`, afterStatus === 'out' || afterStatus === 'order' ? 'danger' : afterStatus === 'low' ? 'warn' : 'success', live.name);
+      toast(mode === 'use' ? t('Took {n} {unit} — {after} left', { n, unit, after }) : mode === 'receive' ? t('Received {n} {unit} — now {after}', { n, unit, after }) : t('Count saved — {after} {unit}', { after, unit }), afterStatus === 'out' || afterStatus === 'order' ? 'danger' : afterStatus === 'low' ? 'warn' : 'success', live.name);
       onClose();
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
   const titles = { use: 'Take / use parts', receive: 'Receive / restock', set: 'Count — set exact amount' };
   return (
-    <Modal title={titles[mode]} onClose={onClose}
+    <Modal title={t(titles[mode])} onClose={onClose}
       footer={<>
-        <button className="btn lg" onClick={onClose}>Cancel</button>
+        <button className="btn lg" onClick={onClose}>{t('Cancel')}</button>
         <button className={`btn lg ${mode === 'use' ? 'primary' : mode === 'receive' ? 'ok' : 'primary'}`} onClick={submit} disabled={busy || invalid}>
           {mode === 'use' ? <PackageMinus /> : mode === 'receive' ? <PackagePlus /> : <ClipboardCheck />}
-          {mode === 'use' ? `Take ${n}` : mode === 'receive' ? `Add ${n}` : `Set to ${n}`}
+          {mode === 'use' ? t('Take {n}', { n }) : mode === 'receive' ? t('Add {n}', { n }) : t('Set to {n}', { n })}
         </button>
       </>}>
       <form className="stack" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <div className="seg" style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
           {(['use', 'receive', 'set'] as StockMode[]).map((m) => (
             <button type="button" key={m} className={mode === m ? 'on' : ''} onClick={() => { setMode(m); setQty(m === 'set' ? live.qty : 1); }}>
-              {m === 'use' ? 'Take' : m === 'receive' ? 'Receive' : 'Count'}
+              {m === 'use' ? t('Take') : m === 'receive' ? t('Receive') : t('Count')}
             </button>
           ))}
         </div>
@@ -240,26 +241,26 @@ export function StockDialog({ part, mode: initialMode, onClose }: { part: Part; 
           <div style={{ fontWeight: 750, fontSize: '1.1rem' }}>{live.name}</div>
           <div className="muted">{[live.partNumber, live.manufacturer, live.location].filter(Boolean).join(' · ')}</div>
         </div>
-        <Field label={mode === 'set' ? `How many are on the shelf right now? (${unit})` : `How many? (${unit})`}>
+        <Field label={mode === 'set' ? t('How many are on the shelf right now? ({unit})', { unit }) : t('How many? ({unit})', { unit })}>
           <div className="qty-stepper">
-            <button type="button" className="btn" onClick={() => setQty(Math.max(0, n - 1))} aria-label="Less"><Minus /></button>
+            <button type="button" className="btn" onClick={() => setQty(Math.max(0, n - 1))} aria-label={t('Less')}><Minus /></button>
             <NumberInput value={qty} onChange={setQty} min={0} className="grow" />
-            <button type="button" className="btn" onClick={() => setQty(n + 1)} aria-label="More"><Plus /></button>
+            <button type="button" className="btn" onClick={() => setQty(n + 1)} aria-label={t('More')}><Plus /></button>
           </div>
         </Field>
         <div className="row" style={{ justifyContent: 'center', fontSize: '1.15rem', gap: '1rem' }}>
-          <span>Now: <b>{live.qty}</b></span><span className="muted">→</span>
-          <span>After: <b className={`qty-big ${afterStatus}`} style={{ fontSize: '1.4rem' }}>{after}</b></span>
+          <span>{t('Now:')} <b>{live.qty}</b></span><span className="muted">→</span>
+          <span>{t('After:')} <b className={`qty-big ${afterStatus}`} style={{ fontSize: '1.4rem' }}>{after}</b></span>
           <StatusPill status={afterStatus} />
         </div>
-        {after < 0 && <div className="banner danger">Only {live.qty} {unit} in stock.</div>}
+        {after < 0 && <div className="banner danger">{t('Only {n} {unit} in stock.', { n: live.qty, unit })}</div>}
         {mode === 'use' && (
           <Field label="Used on which machine? (optional)">
             <Combobox value={machine} onChange={setMachine} options={machineOptions} placeholder="Pick a machine" />
           </Field>
         )}
         <Field label="Note (optional)">
-          <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={mode === 'receive' ? 'e.g. PO 12345' : mode === 'use' ? 'e.g. replaced during breakdown' : 'e.g. monthly cycle count'} />
+          <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t(mode === 'receive' ? 'e.g. PO 12345' : mode === 'use' ? 'e.g. replaced during breakdown' : 'e.g. monthly cycle count')} />
         </Field>
       </form>
     </Modal>

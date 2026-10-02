@@ -7,6 +7,7 @@ import { safeGet, safeSet } from '../lib/api';
 import { matches, stockStatus } from '../lib/util';
 import { Modal, SearchInput, Seg, Thumb, Empty } from './ui';
 import { StockDialog } from './PartDialogs';
+import { t } from '../lib/i18n';
 
 type Mode = 'use' | 'receive';
 const RECENT_KEY = 'ppip.quicklog.recent';
@@ -25,9 +26,9 @@ export function QuickLogBubble() {
   if (!canEdit) return null;
   return (
     <>
-      <button className="fab no-print" data-tour="quicklog" onClick={() => setOpen(true)} aria-label="Quick log: parts used or received" title="Quick log — parts used / received">
+      <button className="fab no-print" data-tour="quicklog" onClick={() => setOpen(true)} aria-label={t('Quick log: parts used or received')} title={t('Quick log — parts used / received')}>
         <Zap size={26} />
-        <span className="fab-label">Quick log</span>
+        <span className="fab-label">{t('Quick log')}</span>
       </button>
       {open && <QuickLogPicker onClose={() => setOpen(false)} onPick={(part, mode) => { remember(part.id); setOpen(false); setPicked({ part, mode }); }} />}
       {picked && <StockDialog part={picked.part} mode={picked.mode} onClose={() => setPicked(null)} />}
@@ -69,8 +70,8 @@ function QuickLogPicker({ onClose, onPick }: { onClose: () => void; onPick: (p: 
     <Modal title="Quick log" icon={<Zap color="var(--primary)" />} onClose={onClose}>
       <div className="stack">
         <Seg value={mode} onChange={(m) => { setMode(m); inputRef.current?.focus(); }} options={[
-          { id: 'use', label: <span className="row" style={{ gap: 6 }}><PackageMinus size={18} />Used / took parts</span> },
-          { id: 'receive', label: <span className="row" style={{ gap: 6 }}><PackagePlus size={18} />Received parts</span> },
+          { id: 'use', label: <span className="row" style={{ gap: 6 }}><PackageMinus size={18} />{t('Used / took parts')}</span> },
+          { id: 'receive', label: <span className="row" style={{ gap: 6 }}><PackagePlus size={18} />{t('Received parts')}</span> },
         ]} />
         <SearchInput inputRef={inputRef} value={q} autoFocus placeholder="Type part name or part #…"
           onChange={(v) => { setQ(v); setActive(0); }}
@@ -79,10 +80,10 @@ function QuickLogPicker({ onClose, onPick }: { onClose: () => void; onPick: (p: 
             else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
             else if (e.key === 'Enter') { e.preventDefault(); choose(list[active]); }
           }} />
-        {!q.trim() && list.length > 0 && <div className="small muted row" style={{ gap: 6 }}><Clock size={15} />Recently logged on this device</div>}
+        {!q.trim() && list.length > 0 && <div className="small muted row" style={{ gap: 6 }}><Clock size={15} />{t('Recently logged on this device')}</div>}
         {list.length === 0 ? (
-          q.trim() ? <Empty title="No matching parts">Check the spelling or try the part number.</Empty>
-            : <div className="muted center" style={{ padding: '1rem 0' }}>Start typing to find a part.</div>
+          q.trim() ? <Empty title="No matching parts">{t('Check the spelling or try the part number.')}</Empty>
+            : <div className="muted center" style={{ padding: '1rem 0' }}>{t('Start typing to find a part.')}</div>
         ) : (
           <div className="card list" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
             {list.map((p, i) => {
@@ -94,7 +95,7 @@ function QuickLogPicker({ onClose, onPick }: { onClose: () => void; onPick: (p: 
                   <Thumb id={p.imageId} />
                   <div className="grow" style={{ minWidth: 0 }}>
                     <div className="ellipsis" style={{ fontWeight: 700 }}>{p.name}</div>
-                    <div className="small muted ellipsis">{[p.partNumber, p.location].filter(Boolean).join(' · ')}{disabled ? ' · none in stock' : ''}</div>
+                    <div className="small muted ellipsis">{[p.partNumber, p.location].filter(Boolean).join(' · ')}{disabled ? ` · ${t('none in stock')}` : ''}</div>
                   </div>
                   <span className={`qty-big ${st}`}>{p.qty}</span>
                 </button>

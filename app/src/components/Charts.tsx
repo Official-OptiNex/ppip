@@ -1,5 +1,6 @@
 // Lightweight SVG charts (no chart library → fast load). Hover shows exact values.
 import { useRef, useState, type ReactNode } from 'react';
+import { t } from '../lib/i18n';
 
 export interface Series { key: string; label: string; color: string }
 
@@ -22,7 +23,7 @@ export function BarChart({ data, series, height = 260, format = (n: number) => n
   return (
     <div style={{ position: 'relative' }}>
       {series.length > 1 && <div className="legend" style={{ marginBottom: 8 }}>{series.map((s) => <span key={s.key}><i style={{ background: s.color }} />{s.label}</span>)}</div>}
-      <svg ref={ref} className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Bar chart" onMouseLeave={() => setTip(null)}>
+      <svg ref={ref} className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t('Bar chart')} onMouseLeave={() => setTip(null)}>
         {ticks.map((t) => {
           const y = padT + plotH - (t / nice) * plotH;
           return <g key={t}><line className="gridline" x1={padL} x2={W - padR} y1={y} y2={y} /><text x={padL - 8} y={y + 4} textAnchor="end">{shortNum(t)}</text></g>;
@@ -61,7 +62,7 @@ export function BarChart({ data, series, height = 260, format = (n: number) => n
 export function HBarList({ rows, format = (n: number) => n.toLocaleString(), empty = 'No data yet.' }: {
   rows: { key: string; label: ReactNode; value: number; sub?: ReactNode; href?: string }[]; format?: (n: number) => string; empty?: string;
 }) {
-  if (!rows.length) return <div className="empty small">{empty}</div>;
+  if (!rows.length) return <div className="empty small">{t(empty)}</div>;
   const max = Math.max(1, ...rows.map((r) => r.value));
   return (
     <div>

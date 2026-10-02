@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } fro
 import { ArrowLeft, ArrowRight, X, PartyPopper } from 'lucide-react';
 import { savePrefs, useStore } from '../lib/store';
 import { navigate } from '../lib/util';
+import { t } from '../lib/i18n';
+import { rich } from './ui';
 import type { Role } from '../../../shared/types';
 
 interface Step {
@@ -19,23 +21,26 @@ export function startTour(asRole?: Role) { window.dispatchEvent(new CustomEvent(
 
 function steps(name: string): Step[] {
   return [
-    { route: '/', title: `Welcome, ${name}! 👋`, body: <>This quick tour shows you around — it takes about two minutes. Use <b>Next</b> and <b>Back</b>, or <b>Skip</b> any time. You can replay it later from the <b>Help</b> page.</> },
-    { route: '/', target: 'nav', title: 'The menu', body: <>Everything lives here: <b>Parts</b>, <b>Order Guides</b>, <b>PMs</b>, <b>Hot Knives</b>, <b>Rollers</b>, reports and more. Red and orange numbers mean something needs attention. On a phone, tap <b>More</b> at the bottom to open it.</> },
-    { route: '/', target: 'search', title: 'Search anything', body: <>Type a part name, part number, manufacturer, machine, knife or roller tag. Results show as you type. Shortcut: press <b>/</b> on the keyboard.</> },
-    { route: '/', target: 'live', title: 'Always live', body: <>The green <b>Live</b> dot means you're connected. Changes from anyone show up on every screen instantly — no refreshing. If the internet drops, keep working; it syncs when it's back.</> },
-    { route: '/', target: 'alerts', title: 'Alerts', body: <>The bell shows parts that are <b>out of stock</b> or <b>running low</b>, PMs that are due, and other notices.</> },
-    { route: '/', target: 'theme', title: 'Light or dark', body: <>Switch between dark and light mode here. Bigger text is under your name (bottom-left) → <b>Text size</b>.</> },
-    { route: '/', target: 'tiles', title: 'Your dashboard', body: <>A quick overview: what's out, what's low, PMs due and open orders. Click any box to jump straight to it.</> },
-    { route: '/parts', target: 'status-chips', title: 'Parts & stock colors', body: <><b style={{ color: 'var(--ok)' }}>Green</b> = in stock · <b style={{ color: 'var(--warn)' }}>Orange</b> = running low · <b style={{ color: 'var(--danger)' }}>Red</b> = order now / out. Tap a button to show only those parts.</> },
-    { route: '/parts', target: 'parts-list', title: 'Every part in one place', body: <>Click a column heading to sort. Click a part to see its photo, details, order link and full history. <b>Take</b> and <b>Add</b> change the stock count and log who did it.</> },
-    { route: '/parts', target: 'add-part', editorOnly: true, title: 'Add a part', body: <>Fill in the name, number and manufacturer — the order link builds itself for most suppliers. You can add a photo from the PC or take one with your phone.</> },
-    { route: '/parts', target: 'quicklog', editorOnly: true, title: 'Quick log', body: <>This button is on every page. Tap it, pick <b>Used</b> or <b>Received</b>, type the part, done — the fastest way to log parts.</> },
-    { route: '/pms', target: 'log-pm', title: 'Machine PMs', body: <>Log each weekly or monthly PM here. The next due date fills in automatically — 7 days after the last PM, with a monthly once a month. Overdue machines turn red.</> },
-    { route: '/knives', target: 'eq-add', title: 'Hot knives & rollers', body: <>Track which knife or roller is on which machine and how many days it's been there. Use <b>Install</b>, <b>Remove</b> and <b>Move</b> to keep it current.</> },
-    { route: '/downtime', target: 'downtime-add', editorOnly: true, title: 'Downtime, welders & crushed cores', body: <>Log every stop here — machine, minutes, what happened. <b>Sonic Welders</b> tracks horns and anvils, and <b>Crushed Cores</b> logs cores by tag number.</> },
-    { route: '/orders', target: 'new-order', editorOnly: true, title: 'Order guides — no more handwriting', body: <>Type up what you need and why, then print it in the standard format. <b>From low stock</b> builds the list for you.</> },
-    { route: '/profile', target: 'text-size', title: 'Make it comfortable', body: <>Pick the text size that's easiest to read. It's saved to your account on every computer.</> },
-    { route: '/', title: "You're all set! 🎉", body: <>That's it. If you get stuck, the <b>Help</b> page in the menu has a short how-to, and you can replay this tour from there any time.</> },
+    { route: '/', title: t('Welcome, {name}! 👋', { name }), body: rich('This quick tour shows you around — it takes about two minutes. Use **Next** and **Back**, or **Skip** any time. You can replay it later from the **Help** page.') },
+    { route: '/', target: 'nav', title: t('The menu'), body: rich('Everything lives here: **Parts**, **Order Guides**, **PMs**, **Hot Knives**, **Rollers**, **Sonic Welders**, **Downtime** and **Crushed Cores**. Reports, labels and more are under **More tools**. Red and orange numbers mean something needs attention. On a phone, tap **More** at the bottom.') },
+    { route: '/', target: 'search', title: t('Search anything'), body: rich('Type a part name, part number, manufacturer, machine, or a knife / roller tag. Results show as you type. Shortcut: press **/** on the keyboard.') },
+    { route: '/', target: 'live', title: t('Always live'), body: rich("The green **Live** dot means you're connected. Changes from anyone show up on every screen instantly — no refreshing. If the internet drops, keep working; it syncs when it's back.") },
+    { route: '/', target: 'alerts', title: t('Alerts'), body: rich('The bell shows parts that are **out of stock** or **running low**, PMs that are due, and other notices.') },
+    { route: '/', target: 'theme', title: t('Light or dark'), body: rich('Switch between dark and light mode here. Text size, language (English / Español) and your profile picture are in **My settings** — click your name at the bottom-left.') },
+    { route: '/', target: 'tiles', title: t('Your dashboard'), body: rich("A quick overview: what's out, what's low, PMs due and open orders. Click any box to jump straight to it.") },
+    { route: '/parts', target: 'status-chips', title: t('Parts & stock colors'), body: <>{rich('**Green** = in stock · **Orange** = running low · **Red** = order now / out.')} {t('Tap a button to show only those parts.')}</> },
+    { route: '/parts', target: 'parts-list', title: t('Every part in one place'), body: rich('Click a column heading to sort. Click a part to see its photo, details, order link and full history. **Take** and **Add** change the stock count and log who did it.') },
+    { route: '/parts', target: 'add-part', editorOnly: true, title: t('Add a part'), body: rich('Fill in the name, number and manufacturer — the order link builds itself for most suppliers. Add a photo from the PC or take one with your phone.') },
+    { route: '/parts', target: 'quicklog', editorOnly: true, title: t('Quick log'), body: rich('This button is on every page. Tap it, pick **Used** or **Received**, type the part, done — the fastest way to log parts.') },
+    { route: '/pms', target: 'log-pm', title: t('Machine PMs'), body: rich('Log each weekly or monthly PM here. The next due date fills in by itself — 7 days after the last PM, and a monthly once a month. Overdue machines turn red.') },
+    { route: '/knives', target: 'eq-add', title: t('Hot knives & rollers'), body: rich("See which knife or roller is on which machine and for how many days. Use **Install**, **Remove** and **Move**. Open one to see every install and pull date; **How long they last** shows the average life.") },
+    { route: '/welders', target: 'welders', title: t('Sonic welders'), body: rich('Each welder has one horn and one anvil. Use **Change horn** or **Change anvil** when you swap one — the old one goes back to spares and its days are saved.') },
+    { route: '/downtime', target: 'downtime-add', editorOnly: true, title: t('Downtime & glitches'), body: rich('Log every stop: machine, how many minutes, what happened and what fixed it. You will see which machines lose the most time.') },
+    { route: '/cores', target: 'cores-add', editorOnly: true, title: t('Crushed cores'), body: rich('Click **Add crushed core**, scan or type the tag and press Enter. Date and time fill in by themselves.') },
+    { route: '/orders', target: 'new-order', editorOnly: true, title: t('Order guides — no more handwriting'), body: rich('Type up what you need and why, then print it in the standard format. **From low stock** builds the list for you.') },
+    { route: '/labels', target: 'label-size', title: t('Labels'), body: rich('Print labels on the 4×6 Zebra printer: one big label, or 2 to 12 small ones on one sheet to cut out for bins and boxes.') },
+    { route: '/profile', target: 'text-size', title: t('Make it comfortable'), body: rich('Pick the text size that is easiest to read, your language and a profile picture. It is saved to your account on every computer.') },
+    { route: '/', title: t("You're all set! 🎉"), body: rich("That's it. If you get stuck, the **Help** page in the menu has short how-tos and common questions, and you can replay this tour from there any time.") },
   ];
 }
 
@@ -48,9 +53,10 @@ export function TourHost() {
 
   // first login: open automatically once
   useEffect(() => {
-    if (phase === 'ready' && me && !me.prefs?.tutorialDone) { setI(0); setAsRole(undefined); setOpen(true); }
+    // (waits until the language has been chosen, so the tour is in the right language)
+    if (phase === 'ready' && me && me.prefs?.lang && !me.prefs?.tutorialDone) { setI(0); setAsRole(undefined); setOpen(true); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, me?.id, me?.prefs?.tutorialDone]);
+  }, [phase, me?.id, me?.prefs?.tutorialDone, me?.prefs?.lang]);
   useEffect(() => {
     const on = (e: Event) => { setI(0); setAsRole((e as CustomEvent<{ role?: Role }>).detail?.role); setOpen(true); };
     window.addEventListener('ppip:tour', on);
@@ -133,20 +139,20 @@ function TourStep({ step, index, total, onBack, onNext, onSkip }: { step: Step; 
     cardStyle = { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
   }
   return (
-    <div className="tour-root" role="dialog" aria-modal="true" aria-label="Guided tour">
+    <div className="tour-root" role="dialog" aria-modal="true" aria-label={t('Guided tour')}>
       <div className="tour-block" />
       {rect ? <div className="tour-spot" style={{ top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }} /> : <div className="tour-dim" />}
       <div className="tour-card" style={{ width: cardW, ...cardStyle }}>
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <span className="small muted" style={{ fontWeight: 700 }}>Step {index + 1} of {total}</span>
-          <button className="btn icon sm ghost" onClick={onSkip} aria-label="Close tour"><X size={18} /></button>
+          <span className="small muted" style={{ fontWeight: 700 }}>{t('Step {i} of {n}', { i: index + 1, n: total })}</span>
+          <button className="btn icon sm ghost" onClick={onSkip} aria-label={t('Close tour')} title={t('Close tour')}><X size={18} /></button>
         </div>
         <h2 style={{ margin: '0.2rem 0 0.5rem' }}>{index + 1 === total && <PartyPopper size={22} style={{ verticalAlign: -3, marginRight: 6 }} />}{step.title}</h2>
         <div style={{ fontSize: '1.02rem', lineHeight: 1.5 }}>{step.body}</div>
         <div className="tour-dots" aria-hidden>{Array.from({ length: total }, (_, k) => <i key={k} className={k === index ? 'on' : k < index ? 'done' : ''} />)}</div>
         <div className="row" style={{ justifyContent: 'space-between', marginTop: '0.4rem' }}>
-          {index === 0 ? <button className="btn ghost" onClick={onSkip}>Skip tour</button> : <button className="btn" onClick={onBack}><ArrowLeft size={18} />Back</button>}
-          <button className="btn primary lg" onClick={onNext} autoFocus>{index + 1 === total ? 'Finish' : index === 0 ? "Let's go" : 'Next'}{index + 1 < total && <ArrowRight size={18} />}</button>
+          {index === 0 ? <button className="btn ghost" onClick={onSkip}>{t('Skip tour')}</button> : <button className="btn" onClick={onBack}><ArrowLeft size={18} />{t('Back')}</button>}
+          <button className="btn primary lg" onClick={onNext} autoFocus>{index + 1 === total ? t('Finish') : index === 0 ? t("Let's go") : t('Next')}{index + 1 < total && <ArrowRight size={18} />}</button>
         </div>
       </div>
     </div>

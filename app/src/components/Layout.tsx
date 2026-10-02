@@ -4,11 +4,12 @@ import {
   HelpCircle, ChevronDown, ShoppingCart, Wrench, Sun, Moon, Bell, Menu as MenuIcon, LogOut, UserCircle2, Search, Plus, X, Wifi, WifiOff, AlertTriangle, XCircle, CheckCircle2, Info, MoreHorizontal,
 } from 'lucide-react';
 import { useStore, logout, markNotificationsSeen, can } from '../lib/store';
-import { stockStatus, matches, avatarColor, initials, timeAgo, navigate, useNow } from '../lib/util';
+import { stockStatus, matches, timeAgo, navigate, useNow } from '../lib/util';
 import { usePmStates, pmDueCount } from '../lib/pmhooks';
 import { savePrefs } from '../lib/store';
 import { isFileMode, safeGet, safeSet } from '../lib/api';
-import { Thumb } from './ui';
+import { Avatar, Thumb } from './ui';
+import { locale, plural, t } from '../lib/i18n';
 import { QuickLogBubble } from './QuickLog';
 import { Logo, APP_NAME } from './Logo';
 import { EQUIPMENT_LABEL } from '../../../shared/types';
@@ -41,6 +42,8 @@ const NAV_FOOT: NavItem[] = [
   { to: '/admin', label: 'Admin', icon: <ShieldCheck size={21} />, admin: true },
 ];
 
+export const roleName = (r?: string) => (r === 'admin' ? 'Admin' : r === 'editor' ? 'Editor' : 'Viewer');
+
 export function isActive(to: string, path: string) {
   return to === '/' ? path === '/' : path === to || path.startsWith(to + '/');
 }
@@ -64,11 +67,11 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
   useEffect(() => { if (inMore) setMoreOpen(true); }, [inMore]);
   useEffect(() => { safeSet('ppip.navMore', moreOpen ? '1' : '0'); }, [moreOpen]);
   const navLink = (n: NavItem) => {
-    const badge = n.to === '/parts' ? (counts.out ? <span className="count danger" title="Out of stock or order now">{counts.out}</span> : counts.low ? <span className="count warn" title="Running low">{counts.low}</span> : null)
-      : n.to === '/pms' && pmDue ? <span className={`count ${pmOverdue ? 'danger' : 'warn'}`} title="PMs due">{pmDue}</span> : null;
+    const badge = n.to === '/parts' ? (counts.out ? <span className="count danger" title={t('Out of stock or order now')}>{counts.out}</span> : counts.low ? <span className="count warn" title={t('Running low')}>{counts.low}</span> : null)
+      : n.to === '/pms' && pmDue ? <span className={`count ${pmOverdue ? 'danger' : 'warn'}`} title={t('PMs due')}>{pmDue}</span> : null;
     return (
       <a key={n.to} href={`#${n.to}`} className={isActive(n.to, path) ? 'active' : ''} aria-current={isActive(n.to, path) ? 'page' : undefined}>
-        {n.icon}<span>{n.label}</span>{badge}
+        {n.icon}<span>{t(n.label)}</span>{badge}
       </a>
     );
   };
@@ -81,14 +84,14 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
           <Logo size={44} />
           <div className="grow">
             <div className="brand-name">{APP_NAME}</div>
-            <div className="brand-sub ellipsis">{settings.companyName || 'Inventory'}</div>
+            <div className="brand-sub ellipsis">{settings.companyName || t('Inventory')}</div>
           </div>
-          <button className="btn icon ghost mobile-only" onClick={() => setNavOpen(false)} aria-label="Close menu"><X /></button>
+          <button className="btn icon ghost mobile-only" onClick={() => setNavOpen(false)} aria-label={t('Close menu')}><X /></button>
         </div>
         <nav className="nav" data-tour="nav">
           {NAV_MAIN.map((n) => navLink(n))}
           <button className={`nav-more ${moreOpen ? 'open' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-expanded={moreOpen}>
-            <MoreHorizontal size={21} /><span>More tools</span><ChevronDown size={18} className="chev" />
+            <MoreHorizontal size={21} /><span>{t('More tools')}</span><ChevronDown size={18} className="chev" />
           </button>
           {moreOpen && <div className="nav-sub">{NAV_MORE.map((n) => navLink(n))}</div>}
           <div className="nav-sep" />
@@ -96,15 +99,15 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
         </nav>
         <div className="sidebar-foot">
           <a className="btn block ghost" href="#/profile" style={{ justifyContent: 'flex-start' }}>
-            <span className="avatar" style={{ background: avatarColor(me?.name || '') }}>{initials(me?.name || '')}</span>
-            <span className="grow ellipsis" style={{ textAlign: 'left' }}>{me?.name}<br /><span className="small muted" style={{ textTransform: 'capitalize' }}>{me?.role}</span></span>
+            <Avatar name={me?.name || ''} image={me?.avatar} />
+            <span className="grow ellipsis" style={{ textAlign: 'left' }}>{me?.name}<br /><span className="small muted">{t(roleName(me?.role))}</span></span>
           </a>
         </div>
       </aside>
 
       <div className="main">
         <header className="topbar no-print">
-          <button className="btn icon ghost mobile-only" onClick={() => setNavOpen(true)} aria-label="Open menu"><MenuIcon /></button>
+          <button className="btn icon ghost mobile-only" onClick={() => setNavOpen(true)} aria-label={t('Open menu')}><MenuIcon /></button>
           <GlobalSearch />
           <div className="row" style={{ gap: '0.5rem' }}>
             <Clock />
@@ -119,12 +122,12 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
       </div>
 
       <QuickLogBubble />
-      <nav className="bottom-nav no-print" aria-label="Quick navigation">
-        <a href="#/" className={path === '/' ? 'active' : ''}><LayoutDashboard size={22} />Home</a>
-        <a href="#/parts" className={isActive('/parts', path) ? 'active' : ''}><Package size={22} />Parts</a>
-        <a href="#/knives" className={isActive('/knives', path) ? 'active' : ''}><Flame size={22} />Knives</a>
-        <a href="#/pms" className={isActive('/pms', path) ? 'active' : ''}><Wrench size={22} />PMs</a>
-        <button onClick={() => setNavOpen(true)}><MoreHorizontal size={22} />More</button>
+      <nav className="bottom-nav no-print" aria-label={t('Quick navigation')}>
+        <a href="#/" className={path === '/' ? 'active' : ''}><LayoutDashboard size={22} />{t('Home')}</a>
+        <a href="#/parts" className={isActive('/parts', path) ? 'active' : ''}><Package size={22} />{t('Parts')}</a>
+        <a href="#/knives" className={isActive('/knives', path) ? 'active' : ''}><Flame size={22} />{t('Knives')}</a>
+        <a href="#/pms" className={isActive('/pms', path) ? 'active' : ''}><Wrench size={22} />{t('PMs')}</a>
+        <button onClick={() => setNavOpen(true)}><MoreHorizontal size={22} />{t('More')}</button>
       </nav>
     </div>
   );
@@ -134,10 +137,10 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
 function Clock() {
   const now = useNow(5000);
   const d = new Date(now);
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  const date = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const time = d.toLocaleTimeString(locale(), { hour: 'numeric', minute: '2-digit' });
+  const date = d.toLocaleDateString(locale(), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   return (
-    <div className="clock" title={d.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })} aria-label={`${date}, ${time}`}>
+    <div className="clock" title={d.toLocaleString(locale(), { dateStyle: 'full', timeStyle: 'short' })} aria-label={`${date}, ${time}`}>
       <span className="c-time">{time}</span>
       <span className="c-date">{date}</span>
     </div>
@@ -149,7 +152,7 @@ function ThemeToggle() {
   const dark = theme !== 'light' && (theme !== 'system' || matchMedia('(prefers-color-scheme: dark)').matches);
   return (
     <button className="btn icon ghost" data-tour="theme" onClick={() => savePrefs({ theme: dark ? 'light' : 'dark' })}
-      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
+      aria-label={dark ? t('Switch to light mode') : t('Switch to dark mode')} title={dark ? t('Light mode') : t('Dark mode')}>
       {dark ? <Sun size={22} /> : <Moon size={22} />}
     </button>
   );
@@ -158,13 +161,13 @@ function ThemeToggle() {
 function ConnectionPill() {
   const conn = useStore((s) => s.conn);
   const outbox = useStore((s) => s.outbox.length);
-  const label = conn === 'live' ? 'Live' : conn === 'connecting' ? 'Connecting…' : 'Offline';
-  const title = conn === 'live' ? 'Connected — changes from everyone appear instantly.' : conn === 'offline' ? 'No connection. You can keep working; changes sync when the connection returns.' : 'Reconnecting to the server…';
+  const label = conn === 'live' ? t('Live') : conn === 'connecting' ? t('Connecting…') : t('Offline');
+  const title = conn === 'live' ? t('Connected — changes from everyone appear instantly.') : conn === 'offline' ? t('No connection. You can keep working; changes sync when the connection returns.') : t('Reconnecting to the server…');
   return (
     <span className={`conn ${conn}`} title={title} role="status" data-tour="live">
       {conn === 'offline' ? <WifiOff size={16} /> : conn === 'live' ? <span className="dot" /> : <Wifi size={16} />}
       <span className="desktop-only">{label}{isFileMode ? ' · USB' : ''}</span>
-      {outbox > 0 && <span title="Changes waiting to sync">· {outbox} to sync</span>}
+      {outbox > 0 && <span title={t('Changes waiting to sync')}>· {t('{n} to sync', { n: outbox })}</span>}
     </span>
   );
 }
@@ -172,11 +175,12 @@ function ConnectionPill() {
 function Presence() {
   const online = useStore((s) => s.online);
   const me = useStore((s) => s.me);
+  const users = useStore((s) => s.users);
   const others = online.filter((o) => o.id !== me?.id);
   if (!others.length) return null;
   return (
-    <div className="avatars desktop-only" title={`Also online: ${others.map((o) => o.name).join(', ')}`}>
-      {others.slice(0, 4).map((o) => <span key={o.id} className="avatar" style={{ background: avatarColor(o.name) }}>{initials(o.name)}</span>)}
+    <div className="avatars desktop-only" title={t('Also online: {names}', { names: others.map((o) => o.name).join(', ') })}>
+      {others.slice(0, 4).map((o) => <Avatar key={o.id} name={o.name} image={users.find((u) => u.id === o.id)?.avatar} />)}
       {others.length > 4 && <span className="avatar" style={{ background: 'var(--muted)' }}>+{others.length - 4}</span>}
     </div>
   );
@@ -208,19 +212,19 @@ function Notifications() {
   const badge = unread || attention.out + attention.order;
   return (
     <div className="pop-anchor" ref={ref} data-tour="alerts">
-      <button className="btn icon ghost" onClick={toggle} aria-label={`Notifications${badge ? ` (${badge})` : ''}`} style={{ position: 'relative' }}>
+      <button className="btn icon ghost" onClick={toggle} aria-label={`${t('Notifications')}${badge ? ` (${badge})` : ''}`} style={{ position: 'relative' }}>
         <Bell size={22} />
         {badge > 0 && <span className="badge-dot">{badge > 99 ? '99+' : badge}</span>}
       </button>
       {open && (
         <div className="popover" onClick={(e) => { if ((e.target as HTMLElement).closest('a')) setOpen(false); }}>
-          <div className="card-head"><h3>Alerts & notifications</h3></div>
+          <div className="card-head"><h3>{t('Alerts & notifications')}</h3></div>
           <div className="list" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-            {attention.out > 0 && <a className="list-item" href="#/parts?status=out"><span className="li-icon danger"><XCircle size={19} /></span><div className="grow"><b>{attention.out} part{attention.out > 1 ? 's' : ''} out of stock</b><div className="small muted">Tap to see the list and reorder</div></div></a>}
-            {attention.order > 0 && <a className="list-item" href="#/parts?status=order"><span className="li-icon danger"><ShoppingCart size={19} /></span><div className="grow"><b>{attention.order} part{attention.order > 1 ? 's' : ''} need ordering now</b><div className="small muted">Almost gone — order today</div></div></a>}
-            {attention.low > 0 && <a className="list-item" href="#/parts?status=low"><span className="li-icon warn"><AlertTriangle size={19} /></span><div className="grow"><b>{attention.low} part{attention.low > 1 ? 's' : ''} running low</b><div className="small muted">At or below the reorder point</div></div></a>}
-            {attention.due > 0 && <a className="list-item" href="#/pms"><span className="li-icon warn"><Wrench size={19} /></span><div className="grow"><b>{attention.due} machine PM{attention.due > 1 ? 's' : ''} due</b><div className="small muted">Overdue or due today</div></div></a>}
-            {notifications.length === 0 && !attention.out && !attention.low && <div className="empty small">No notifications yet.</div>}
+            {attention.out > 0 && <a className="list-item" href="#/parts?status=out"><span className="li-icon danger"><XCircle size={19} /></span><div className="grow"><b>{plural(attention.out, '{n} part out of stock', '{n} parts out of stock')}</b><div className="small muted">{t('Tap to see the list and reorder')}</div></div></a>}
+            {attention.order > 0 && <a className="list-item" href="#/parts?status=order"><span className="li-icon danger"><ShoppingCart size={19} /></span><div className="grow"><b>{plural(attention.order, '{n} part needs ordering now', '{n} parts need ordering now')}</b><div className="small muted">{t('Almost gone — order today')}</div></div></a>}
+            {attention.low > 0 && <a className="list-item" href="#/parts?status=low"><span className="li-icon warn"><AlertTriangle size={19} /></span><div className="grow"><b>{plural(attention.low, '{n} part running low', '{n} parts running low')}</b><div className="small muted">{t('At or below the reorder point')}</div></div></a>}
+            {attention.due > 0 && <a className="list-item" href="#/pms"><span className="li-icon warn"><Wrench size={19} /></span><div className="grow"><b>{plural(attention.due, '{n} machine PM due', '{n} machine PMs due')}</b><div className="small muted">{t('Overdue or due today')}</div></div></a>}
+            {notifications.length === 0 && !attention.out && !attention.low && <div className="empty small">{t('No notifications yet.')}</div>}
             {notifications.slice(0, 40).map((n) => {
               const inner = <>
                 <span className={`li-icon ${n.level}`}>{Icon(n.level)}</span>
@@ -251,8 +255,8 @@ function GlobalSearch() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+      const el = e.target as HTMLElement;
+      const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
       if ((e.key === '/' && !typing) || (e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); inputRef.current?.focus(); setOpen(true); }
     };
     window.addEventListener('keydown', onKey);
@@ -285,7 +289,7 @@ function GlobalSearch() {
     <div className="grow pop-anchor" ref={wrap} style={{ maxWidth: 640 }} data-tour="search">
       <div className="input-wrap">
         <Search size={20} />
-        <input ref={inputRef} className="input" value={q} placeholder="Search parts, part #, knives, rollers, orders…" aria-label="Search everything"
+        <input ref={inputRef} className="input" value={q} placeholder={t('Search parts, part #, knives, rollers, orders…')} aria-label={t('Search everything')}
           style={{ minHeight: '2.9rem' }}
           onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); }} onFocus={() => setOpen(true)}
           onKeyDown={(e) => {
@@ -298,8 +302,8 @@ function GlobalSearch() {
       </div>
       {open && q.trim() && (
         <div className="popover search-results" style={{ left: 0, right: 'auto', width: '100%', minWidth: 'min(520px, 94vw)' }}>
-          {flat.length === 0 && <div className="empty small">No matches for “{q}”.</div>}
-          {results.parts.length > 0 && <div className="search-group">Parts</div>}
+          {flat.length === 0 && <div className="empty small">{t('No matches for “{q}”.', { q })}</div>}
+          {results.parts.length > 0 && <div className="search-group">{t('Parts')}</div>}
           {results.parts.map((p) => {
             idx++; const i = idx; const st = stockStatus(p);
             return (
@@ -313,27 +317,27 @@ function GlobalSearch() {
               </button>
             );
           })}
-          {results.eq.length > 0 && <div className="search-group">Knives, rollers, horns & anvils</div>}
+          {results.eq.length > 0 && <div className="search-group">{t('Knives, rollers, horns & anvils')}</div>}
           {results.eq.map((e) => {
             idx++; const i = idx;
             return (
               <button key={e.id} className="list-item" style={{ background: active === i ? 'var(--primary-soft)' : undefined }} onMouseEnter={() => setActive(i)} onClick={() => go(`/${EQUIPMENT_LABEL[e.type].route}?open=${e.id}`)}>
                 <span className="li-icon">{e.type === 'knife' ? <Flame size={19} /> : e.type === 'roller' ? <CircleDot size={19} /> : <AudioWaveform size={19} />}</span>
-                <div className="grow"><b>{e.tag}</b><div className="small muted">{e.machine ? `${e.machine}${e.position ? ` · ${e.position}` : ''}` : e.status}</div></div>
+                <div className="grow"><b>{e.tag}</b><div className="small muted">{e.machine ? `${e.machine}${e.position ? ` · ${e.position}` : ''}` : t(e.status)}</div></div>
               </button>
             );
           })}
-          {results.orders.length > 0 && <div className="search-group">Order guides</div>}
+          {results.orders.length > 0 && <div className="search-group">{t('Order guides')}</div>}
           {results.orders.map((o) => {
             idx++; const i = idx;
             return (
               <button key={o.id} className="list-item" style={{ background: active === i ? 'var(--primary-soft)' : undefined }} onMouseEnter={() => setActive(i)} onClick={() => go(`/orders/${o.id}`)}>
                 <span className="li-icon"><ClipboardList size={19} /></span>
-                <div className="grow"><b>{o.number}</b> · {o.title}<div className="small muted">{o.items.length} items · {o.status}</div></div>
+                <div className="grow"><b>{o.number}</b> · {o.title}<div className="small muted">{plural(o.items.length, '{n} item', '{n} items')} · {t(o.status)}</div></div>
               </button>
             );
           })}
-          {results.parts.length > 0 && <a className="list-item small" href={`#/parts?q=${encodeURIComponent(q)}`} onClick={() => { setOpen(false); setQ(''); }}>See all matching parts →</a>}
+          {results.parts.length > 0 && <a className="list-item small" href={`#/parts?q=${encodeURIComponent(q)}`} onClick={() => { setOpen(false); setQ(''); }}>{t('See all matching parts →')}</a>}
         </div>
       )}
     </div>
@@ -343,8 +347,8 @@ function GlobalSearch() {
 export function UserMenuLinks() {
   return (
     <>
-      <a href="#/profile"><UserCircle2 size={19} />My settings</a>
-      <button className="danger" onClick={() => logout()}><LogOut size={19} />Sign out</button>
+      <a href="#/profile"><UserCircle2 size={19} />{t('My settings')}</a>
+      <button className="danger" onClick={() => logout()}><LogOut size={19} />{t('Sign out')}</button>
     </>
   );
 }

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Printer, Download, PackageMinus, PackagePlus, DollarSign, XCircle, AlertTriangle, Flame, Wrench, Timer, Cylinder } from 'lucide-react';
 import { fmtMinutes } from './Downtime';
+import { locale, t } from '../lib/i18n';
+import { tx } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useStore } from '../lib/store';
 import { DAY, fmtDate, fmtDateTime, money, num, setQuery, stockStatus, download, toCSV } from '../lib/util';
@@ -70,7 +72,7 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
   const pmLate = isCurrentPeriod(start, end) ? pmStates.filter((x) => x.status === 'overdue') : [];
   const usedTotal = rep?.used.reduce((s, r) => s + r.cost, 0) || 0;
   const recvTotal = rep?.received.reduce((s, r) => s + r.cost, 0) || 0;
-  const title = period === 'week' ? `Week of ${fmtDate(start.getTime())} – ${fmtDate(end.getTime() - DAY)}` : start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const title = period === 'week' ? t('Week of {a} – {b}', { a: fmtDate(start.getTime()), b: fmtDate(end.getTime() - DAY) }) : start.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
 
   const exportCsv = () => rep && download(`usage-${iso(start)}.csv`, toCSV(rep.used.map((r) => ({
     part: r.partName, partNumber: parts[r.partId]?.partNumber || '', qtyUsed: r.qty, timesTaken: r.times, cost: r.cost.toFixed(2), machines: r.machines || '', inStockNow: parts[r.partId]?.qty ?? '',
@@ -79,41 +81,41 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
   return (
     <div className="stack">
       <div className="page-head no-print" style={{ marginBottom: 0 }}>
-        <div><h1>{period === 'week' ? 'Weekly' : 'Monthly'} usage report</h1><div className="sub">What was used, received and changed — ready to print or export.</div></div>
+        <div><h1>{t(period === 'week' ? 'Weekly usage report' : 'Monthly usage report')}</h1><div className="sub">{t('What was used, received and changed — ready to print or export.')}</div></div>
         <div className="btn-group">
           <Seg value={period} onChange={(v) => setQuery({ period: v === 'week' ? null : v, start: null })} options={[{ id: 'week', label: 'Week' }, { id: 'month', label: 'Month' }]} />
           <button className="btn" onClick={exportCsv} disabled={!rep}><Download size={18} />CSV</button>
-          <button className="btn primary" onClick={() => window.print()}><Printer size={18} />Print</button>
+          <button className="btn primary" onClick={() => window.print()}><Printer size={18} />{t('Print')}</button>
         </div>
       </div>
       <div className="row no-print" style={{ justifyContent: 'center', gap: '1rem' }}>
-        <button className="btn lg icon" onClick={() => shift(-1)} aria-label="Previous"><ChevronLeft /></button>
-        <div className="center"><h2>{title}</h2>{isCurrent && <div className="small muted">in progress — updates live</div>}</div>
-        <button className="btn lg icon" onClick={() => shift(1)} aria-label="Next" disabled={isCurrent}><ChevronRight /></button>
-        {!isCurrent && <button className="btn" onClick={() => setQuery({ start: null })}>Current</button>}
+        <button className="btn lg icon" onClick={() => shift(-1)} aria-label={t('Previous')}><ChevronLeft /></button>
+        <div className="center"><h2>{title}</h2>{isCurrent && <div className="small muted">{t('in progress — updates live')}</div>}</div>
+        <button className="btn lg icon" onClick={() => shift(1)} aria-label={t('Next')} disabled={isCurrent}><ChevronRight /></button>
+        {!isCurrent && <button className="btn" onClick={() => setQuery({ start: null })}>{t('Current')}</button>}
       </div>
-      <div className="print-only"><h1>{settings.companyName} — {period === 'week' ? 'Weekly' : 'Monthly'} parts report</h1><div>{title} · printed {fmtDateTime(Date.now())}</div><hr /></div>
+      <div className="print-only"><h1>{settings.companyName} — {t(period === 'week' ? 'Weekly usage report' : 'Monthly usage report')}</h1><div>{title} · {t('printed {date}', { date: fmtDateTime(Date.now()) })}</div><hr /></div>
 
       {err && <div className="banner danger">{err}</div>}
       {!rep ? <div className="center" style={{ padding: 60 }}><Spinner /></div> : <>
         <div className="tiles">
-          <div className="tile info"><span className="t-label"><PackageMinus size={18} />Parts used</span><span className="t-value">{num(rep.used.reduce((s, r) => s + r.qty, 0))}</span><span className="t-sub">{rep.used.length} different parts</span></div>
-          <div className="tile"><span className="t-label"><DollarSign size={18} />Cost used</span><span className="t-value" style={{ fontSize: '1.6rem' }}>{money(usedTotal)}</span><span className="t-sub">at recorded cost</span></div>
-          <div className="tile ok"><span className="t-label"><PackagePlus size={18} />Received</span><span className="t-value">{num(rep.received.reduce((s, r) => s + r.qty, 0))}</span><span className="t-sub">{money(recvTotal)} value</span></div>
-          <div className={`tile ${now.out.length ? 'danger' : 'ok'}`}><span className="t-label"><XCircle size={18} />Out of stock now</span><span className="t-value">{now.out.length}</span><span className="t-sub">{now.low.length} running low</span></div>
+          <div className="tile info"><span className="t-label"><PackageMinus size={18} />{t('Parts used')}</span><span className="t-value">{num(rep.used.reduce((s, r) => s + r.qty, 0))}</span><span className="t-sub">{t('{n} different parts', { n: rep.used.length })}</span></div>
+          <div className="tile"><span className="t-label"><DollarSign size={18} />{t('Cost used')}</span><span className="t-value" style={{ fontSize: '1.6rem' }}>{money(usedTotal)}</span><span className="t-sub">{t('at recorded cost')}</span></div>
+          <div className="tile ok"><span className="t-label"><PackagePlus size={18} />{t('Received')}</span><span className="t-value">{num(rep.received.reduce((s, r) => s + r.qty, 0))}</span><span className="t-sub">{t('{v} value', { v: money(recvTotal) })}</span></div>
+          <div className={`tile ${now.out.length ? 'danger' : 'ok'}`}><span className="t-label"><XCircle size={18} />{t('Out of stock now')}</span><span className="t-value">{now.out.length}</span><span className="t-sub">{t('{n} running low', { n: now.low.length })}</span></div>
         </div>
 
         <Section title="Parts used" empty="Nothing was taken in this period.">
           {rep.used.length > 0 && (
             <table className="tbl">
-              <thead><tr><th>Part</th><th>Part #</th><th>Machines</th><th className="num">Qty used</th><th className="num">Times</th><th className="num">Cost</th><th className="num">In stock now</th></tr></thead>
+              <thead><tr><th>{t('Part')}</th><th>{t('Part #')}</th><th>{t('Machines')}</th><th className="num">{t('Qty used')}</th><th className="num">{t('Times')}</th><th className="num">{t('Cost')}</th><th className="num">{t('In stock now')}</th></tr></thead>
               <tbody>
                 {rep.used.map((r) => { const p = parts[r.partId]; const st = p ? stockStatus(p) : 'ok'; return (
                   <tr key={r.partId} className={`st-${st}`}><td><a href={`#/parts/${r.partId}`}><b>{p?.name || r.partName}</b></a></td><td className="mono">{p?.partNumber || '—'}</td><td className="small">{r.machines?.split(',').join(', ') || '—'}</td>
                     <td className="num"><b>{num(r.qty)}</b></td><td className="num">{r.times}</td><td className="num">{r.cost ? money(r.cost) : '—'}</td><td className="num"><span className={`qty-big ${st}`} style={{ fontSize: '1rem' }}>{p?.qty ?? '—'}</span></td></tr>
                 ); })}
               </tbody>
-              <tfoot><tr><td colSpan={5} className="right"><b>Total</b></td><td className="num"><b>{money(usedTotal)}</b></td><td /></tr></tfoot>
+              <tfoot><tr><td colSpan={5} className="right"><b>{t('Total')}</b></td><td className="num"><b>{money(usedTotal)}</b></td><td /></tr></tfoot>
             </table>
           )}
         </Section>
@@ -121,34 +123,34 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
         <Section title="Received / restocked" empty="Nothing was received in this period.">
           {rep.received.length > 0 && (
             <table className="tbl">
-              <thead><tr><th>Part</th><th className="num">Qty received</th><th className="num">Value</th></tr></thead>
+              <thead><tr><th>{t('Part')}</th><th className="num">{t('Qty received')}</th><th className="num">{t('Value')}</th></tr></thead>
               <tbody>{rep.received.map((r) => <tr key={r.partId}><td>{parts[r.partId]?.name || r.partName}</td><td className="num">{num(r.qty)}</td><td className="num">{r.cost ? money(r.cost) : '—'}</td></tr>)}</tbody>
             </table>
           )}
         </Section>
 
         <div className="grid-cards">
-          <Section title={<><XCircle size={18} color="var(--danger)" style={{ verticalAlign: -3 }} /> Out of stock / order now</>} empty="Nothing is out of stock.">
-            {now.out.length > 0 && <table className="tbl"><tbody>{now.out.map((p) => <tr key={p.id} className={`st-${stockStatus(p)}`}><td><b>{p.name}</b> <span className="muted">({p.qty} left)</span><div className="small muted">{[p.partNumber, p.vendor].filter(Boolean).join(' · ')}</div></td></tr>)}</tbody></table>}
+          <Section title={<><XCircle size={18} color="var(--danger)" style={{ verticalAlign: -3 }} /> {t('Out of stock / order now')}</>} empty="Nothing is out of stock.">
+            {now.out.length > 0 && <table className="tbl"><tbody>{now.out.map((p) => <tr key={p.id} className={`st-${stockStatus(p)}`}><td><b>{p.name}</b> <span className="muted">({t('{n} left', { n: p.qty })})</span><div className="small muted">{[p.partNumber, p.vendor].filter(Boolean).join(' · ')}</div></td></tr>)}</tbody></table>}
           </Section>
-          <Section title={<><AlertTriangle size={18} color="var(--warn)" style={{ verticalAlign: -3 }} /> Running low right now</>} empty="Nothing is running low.">
+          <Section title={<><AlertTriangle size={18} color="var(--warn)" style={{ verticalAlign: -3 }} /> {t('Running low right now')}</>} empty="Nothing is running low.">
             {now.low.length > 0 && <table className="tbl"><tbody>{now.low.map((p) => <tr key={p.id} className="st-low"><td><b>{p.name}</b><div className="small muted">{p.partNumber}</div></td><td className="num"><b>{p.qty}</b> / {p.minQty}</td></tr>)}</tbody></table>}
           </Section>
         </div>
 
-        <Section title={<><Wrench size={18} style={{ verticalAlign: -3 }} /> Machine PMs</>} empty="No PMs logged in this period.">
+        <Section title={<><Wrench size={18} style={{ verticalAlign: -3 }} /> {t('Machine PMs')}</>} empty="No PMs logged in this period.">
           {(pmsDone.length > 0 || pmLate.length > 0) && (
             <table className="tbl">
-              <thead><tr><th>Date</th><th>Machine</th><th>Type</th><th>Done by</th><th>Notes</th></tr></thead>
+              <thead><tr><th>{t('Date')}</th><th>{t('Machine')}</th><th>{t('Type')}</th><th>{t('Done by')}</th><th>{t('Notes')}</th></tr></thead>
               <tbody>
-                {pmLate.map((st) => <tr key={'late' + st.machine} className="st-out"><td colSpan={5}><b>Overdue now:</b> {st.machine} — {st.nextType} PM was due {st.nextDue ? parseDay(st.nextDue).toLocaleDateString() : ''}</td></tr>)}
-                {pmsDone.map((l) => <tr key={l.id}><td className="nowrap">{parseDay(l.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</td><td>{l.machine}</td><td>{l.type === 'monthly' ? 'Monthly' : 'Weekly'}</td><td>{l.doneBy || '—'}</td><td className="small">{l.notes}</td></tr>)}
+                {pmLate.map((st) => <tr key={'late' + st.machine} className="st-out"><td colSpan={5}><b>{t('Overdue now:')}</b> {st.machine} — {t(st.nextType === 'monthly' ? 'Monthly PM due {date}' : 'Weekly PM due {date}', { date: st.nextDue ? parseDay(st.nextDue).toLocaleDateString(locale()) : '' })}</td></tr>)}
+                {pmsDone.map((l) => <tr key={l.id}><td className="nowrap">{parseDay(l.date).toLocaleDateString(locale(), { weekday: 'short', month: 'short', day: 'numeric' })}</td><td>{l.machine}</td><td>{t(l.type === 'monthly' ? 'Monthly' : 'Weekly')}</td><td>{l.doneBy || '—'}</td><td className="small">{l.notes}</td></tr>)}
               </tbody>
             </table>
           )}
         </Section>
 
-        <Section title={<><Flame size={18} style={{ verticalAlign: -3 }} /> Hot knife & roller changes</>} empty="No knife or roller changes logged.">
+        <Section title={<><Flame size={18} style={{ verticalAlign: -3 }} /> {t('Knife, roller, horn & anvil changes')}</>} empty="No knife or roller changes logged.">
           {rep.equipment.length > 0 && (
             <table className="tbl">
               <tbody>
@@ -158,19 +160,19 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
           )}
         </Section>
 
-        <Section title={<><Timer size={18} style={{ verticalAlign: -3 }} /> Downtime &amp; glitches{downtime.length ? ` — ${fmtMinutes(downtime.reduce((t, d) => t + (d.minutes || 0), 0))} total` : ''}</>} empty="No downtime logged in this period.">
+        <Section title={<><Timer size={18} style={{ verticalAlign: -3 }} /> {t('Downtime & glitches')}{downtime.length ? ` — ${t('{d} total', { d: fmtMinutes(downtime.reduce((s, d) => s + (d.minutes || 0), 0)) })}` : ''}</>} empty="No downtime logged in this period.">
           {downtime.length > 0 && (
             <table className="tbl">
-              <thead><tr><th>When</th><th>Machine</th><th>What happened</th><th className="num">Down</th></tr></thead>
-              <tbody>{downtime.map((d) => <tr key={d.id}><td className="nowrap small">{fmtDateTime(d.startedAt)}</td><td>{d.machine}{d.welder ? ` · ${d.welder}` : ''}</td><td>{d.problem}{d.fix && <div className="small muted">Fix: {d.fix}</div>}</td><td className="num nowrap">{d.minutes != null ? fmtMinutes(d.minutes) : '—'}</td></tr>)}</tbody>
+              <thead><tr><th>{t('When')}</th><th>{t('Machine')}</th><th>{t('What happened')}</th><th className="num">{t('Down')}</th></tr></thead>
+              <tbody>{downtime.map((d) => <tr key={d.id}><td className="nowrap small">{fmtDateTime(d.startedAt)}</td><td>{d.machine}{d.welder ? ` · ${d.welder}` : ''}</td><td>{d.problem}{d.fix && <div className="small muted">{t('Fix:')} {d.fix}</div>}</td><td className="num nowrap">{d.minutes != null ? fmtMinutes(d.minutes) : '—'}</td></tr>)}</tbody>
             </table>
           )}
         </Section>
 
-        <Section title={<><Cylinder size={18} style={{ verticalAlign: -3 }} /> Crushed cores{cores.length ? ` — ${cores.length}` : ''}</>} empty="No crushed cores logged in this period.">
+        <Section title={<><Cylinder size={18} style={{ verticalAlign: -3 }} /> {t('Crushed cores')}{cores.length ? ` — ${cores.length}` : ''}</>} empty="No crushed cores logged in this period.">
           {cores.length > 0 && (
             <table className="tbl">
-              <thead><tr><th>When</th><th>Tag #</th><th>Machine</th><th>Notes</th></tr></thead>
+              <thead><tr><th>{t('When')}</th><th>{t('Tag #')}</th><th>{t('Machine')}</th><th>{t('Notes')}</th></tr></thead>
               <tbody>{cores.map((c) => <tr key={c.id}><td className="nowrap small">{fmtDateTime(c.at)}</td><td className="mono"><b>{c.tag}</b></td><td>{c.machine || '—'}</td><td className="small">{c.notes}</td></tr>)}</tbody>
             </table>
           )}
@@ -179,7 +181,7 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
         <Section title="Count corrections" empty="No count corrections.">
           {rep.adjustments.length > 0 && (
             <table className="tbl">
-              <thead><tr><th>Part</th><th className="num">Change</th><th className="num">Now</th><th>By</th><th>When</th><th>Note</th></tr></thead>
+              <thead><tr><th>{t('Part')}</th><th className="num">{t('Change')}</th><th className="num">{t('Now')}</th><th>{t('By')}</th><th>{t('When')}</th><th>{t('Note')}</th></tr></thead>
               <tbody>{rep.adjustments.map((a) => <tr key={a.id}><td>{a.partName}</td><td className="num">{a.delta > 0 ? '+' : ''}{a.delta}</td><td className="num">{a.qtyAfter}</td><td>{a.userName}</td><td className="small">{fmtDateTime(a.at)}</td><td className="small">{a.note}</td></tr>)}</tbody>
             </table>
           )}
@@ -188,7 +190,7 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
         {rep.orders.length > 0 && <Section title="Order guide activity" empty="">
           <table className="tbl"><tbody>{rep.orders.map((a) => <tr key={a.id}><td>{a.summary}</td><td className="small muted nowrap">{fmtDateTime(a.at)} · {a.userName}</td></tr>)}</tbody></table>
         </Section>}
-        <p className="small muted">{rep.totals.events} stock entries by {rep.totals.people} people in this period.</p>
+        <p className="small muted">{t('{a} stock entries by {b} people in this period.', { a: rep.totals.events, b: rep.totals.people })}</p>
       </>}
     </div>
   );
@@ -198,8 +200,8 @@ function Section({ title, empty, children }: { title: React.ReactNode; empty: st
   const hasContent = Array.isArray(children) ? children.some(Boolean) : !!children;
   return (
     <div className="card" style={{ breakInside: 'avoid' }}>
-      <div className="card-head"><h3>{title}</h3></div>
-      {hasContent ? <div className="table-wrap" style={{ border: 0, boxShadow: 'none', borderRadius: 0 }}>{children}</div> : <div className="empty small" style={{ padding: '1.2rem' }}>{empty}</div>}
+      <div className="card-head"><h3>{tx(title)}</h3></div>
+      {hasContent ? <div className="table-wrap" style={{ border: 0, boxShadow: 'none', borderRadius: 0 }}>{children}</div> : <div className="empty small" style={{ padding: '1.2rem' }}>{t(empty)}</div>}
     </div>
   );
 }

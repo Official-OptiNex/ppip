@@ -1,4 +1,5 @@
 // Global app state + live sync (WebSocket) + offline queue.
+import { plural, setLang, t } from './i18n';
 import { useSyncExternalStore, useRef } from 'react';
 import {
   DEFAULT_SETTINGS, type Activity, type AppNotification, type DocKind, type DocMap, type Part, type PublicUser, type Settings, type UserPrefs,
@@ -71,7 +72,7 @@ export function toast(title: string, kind: Toast['kind'] = 'success', body?: str
   setTimeout(() => dismissToast(t.id), kind === 'danger' ? ms + 3000 : ms);
 }
 export function dismissToast(id: number) { setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })); }
-export function toastError(e: unknown) { toast(errorMessage(e), 'danger'); }
+export function toastError(e: unknown) { toast(t(errorMessage(e)), 'danger'); }
 
 // ------------------------------------------------------------ cache for instant start / offline
 const CACHE_KEY = 'ppip.cache.v1';
@@ -123,12 +124,12 @@ export async function flushOutbox() {
         sent++;
       } catch (e) {
         if (e instanceof NetworkError) break;
-        toast(`Could not sync: ${item.desc}`, 'danger', errorMessage(e));
+        toast(t('Could not sync: {what}', { what: t(item.desc) }), 'danger', t(errorMessage(e)));
       }
       saveOutbox(state.outbox.slice(1));
     }
   } finally { flushing = false; }
-  if (sent) toast(`Synced ${sent} offline change${sent > 1 ? 's' : ''}`, 'success');
+  if (sent) toast(plural(sent, 'Synced {n} offline change', 'Synced {n} offline changes'), 'success');
 }
 
 // ------------------------------------------------------------ docs helpers
@@ -230,6 +231,8 @@ export function applyAppearance(prefs: UserPrefs | null) {
   const dark = p.theme !== 'light' && (p.theme !== 'system' || matchMedia('(prefers-color-scheme: dark)').matches);
   root.dataset.theme = dark ? 'dark' : 'light';
   root.dataset.size = p.textSize || 'standard';
+  // the account's language wins; until one is chosen, keep what was picked on the sign-in page
+  if (prefs?.lang) setLang(prefs.lang);
 }
 export async function savePrefs(prefs: UserPrefs) {
   const me = state.me;
@@ -309,7 +312,11 @@ function handleMessage(msg: Record<string, unknown>) {
     case 'movement': setState({ lastMovementAt: Date.now() }); break;
     case 'activity': setState((s) => ({ activity: [msg.row as Activity, ...s.activity].slice(0, 60) })); break;
     case 'presence': setState({ online: msg.online as State['online'] }); break;
-    case 'users': setState((s) => ({ users: s.me?.role === 'admin' ? mergeUsers(s.users, msg.users as PublicUser[]) : (msg.users as PublicUser[]) })); break;
+    case 'users': setState((s) => {
+      const list = msg.users as PublicUser[];
+      const mine = s.me && list.find((u) => u.id === s.me!.id);
+      return { users: s.me?.role === 'admin' ? mergeUsers(s.users, list) : list, ...(mine && s.me && mine.avatar !== s.me.avatar ? { me: { ...s.me, avatar: mine.avatar } } : {}) };
+    }); break;
     case 'reload': loadBootstrap().catch(() => {}); break;
     case 'tour': // an admin turned the guided tour on for this account
       if (state.me) setState({ me: { ...state.me, prefs: { ...state.me.prefs, tutorialDone: false } } });

@@ -11,6 +11,7 @@ export interface PublicUser {
   active: boolean;
   lastLogin?: number | null;
   badge?: string | null; // employee badge number (admins see all; each user sees their own)
+  avatar?: string | null; // profile picture (image id)
   createdAt?: number;
   prefs?: UserPrefs;
 }
@@ -20,6 +21,7 @@ export interface UserPrefs {
   textSize?: 'standard' | 'large' | 'xlarge';
   desktopAlerts?: boolean;
   tutorialDone?: boolean; // first-login walkthrough finished or skipped
+  lang?: 'en' | 'es'; // screen language; unset → asked on first sign-in
 }
 
 export interface BaseDoc {
