@@ -1,5 +1,5 @@
 // Floating "quick log" bubble (bottom-right on every page): pick Used / Received, find the part, log it.
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Zap, PackageMinus, PackagePlus, Clock } from 'lucide-react';
 import type { Part } from '../../../shared/types';
 import { useCanEdit, useStore } from '../lib/store';
@@ -10,6 +10,9 @@ import { StockDialog } from './PartDialogs';
 import { t } from '../lib/i18n';
 
 type Mode = 'use' | 'receive';
+
+/** Open the quick-log picker from anywhere (e.g. the dashboard's quick actions). */
+export function openQuickLog(mode: Mode = 'use') { window.dispatchEvent(new CustomEvent('ppip:quicklog', { detail: mode })); }
 const RECENT_KEY = 'ppip.quicklog.recent';
 
 function recentIds(): string[] {
@@ -21,24 +24,29 @@ function remember(id: string) {
 
 export function QuickLogBubble() {
   const canEdit = useCanEdit();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<Mode | false>(false);
   const [picked, setPicked] = useState<{ part: Part; mode: Mode } | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setOpen(((e as CustomEvent).detail as Mode) || 'use');
+    window.addEventListener('ppip:quicklog', on);
+    return () => window.removeEventListener('ppip:quicklog', on);
+  }, []);
   if (!canEdit) return null;
   return (
     <>
-      <button className="fab no-print" data-tour="quicklog" onClick={() => setOpen(true)} aria-label={t('Quick log: parts used or received')} title={t('Quick log — parts used / received')}>
+      <button className="fab no-print" data-tour="quicklog" onClick={() => setOpen('use')} aria-label={t('Quick log: parts used or received')} title={t('Quick log — parts used / received')}>
         <Zap size={26} />
         <span className="fab-label">{t('Quick log')}</span>
       </button>
-      {open && <QuickLogPicker onClose={() => setOpen(false)} onPick={(part, mode) => { remember(part.id); setOpen(false); setPicked({ part, mode }); }} />}
+      {open && <QuickLogPicker initial={open} onClose={() => setOpen(false)} onPick={(part, mode) => { remember(part.id); setOpen(false); setPicked({ part, mode }); }} />}
       {picked && <StockDialog part={picked.part} mode={picked.mode} onClose={() => setPicked(null)} />}
     </>
   );
 }
 
-function QuickLogPicker({ onClose, onPick }: { onClose: () => void; onPick: (p: Part, mode: Mode) => void }) {
+function QuickLogPicker({ initial, onClose, onPick }: { initial: Mode; onClose: () => void; onPick: (p: Part, mode: Mode) => void }) {
   const parts = useStore((s) => s.docs.parts);
-  const [mode, setMode] = useState<Mode>('use');
+  const [mode, setMode] = useState<Mode>(initial);
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);

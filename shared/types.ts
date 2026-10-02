@@ -200,6 +200,15 @@ export interface PrintTemplate {
   fontScale?: number;
 }
 
+/** Is this announcement showing right now for someone with `role`? */
+export function announcementLive(a: Announcement, role: string | undefined, now = Date.now()) {
+  if (a.active === false) return false;
+  if (a.startsAt && a.startsAt > now) return false;
+  if (a.endsAt && a.endsAt <= now) return false;
+  const aud = a.audience || 'all';
+  return aud === 'all' || aud === role || (aud === 'editor' && role === 'admin');
+}
+
 export interface Settings extends BaseDoc {
   companyName?: string;
   department?: string;
@@ -213,6 +222,7 @@ export interface Settings extends BaseDoc {
   printTemplate?: PrintTemplate;
   publicUrl?: string; // used for QR codes when running from USB
   badgeLogin?: boolean; // allow one-scan badge sign-in (default on)
+  idleLogoutMin?: number; // sign people out after this many minutes with no activity (0 = never; default 15)
   shifts?: string[]; // shift names mechanics can be assigned to
 }
 
@@ -247,6 +257,35 @@ export interface CrushedCore extends BaseDoc {
   reportedBy?: string;
 }
 
+/** Site-wide message from an admin: a banner (or pop-up) on every screen. */
+export interface Announcement extends BaseDoc {
+  title: string;
+  body?: string;
+  titleEs?: string; // optional Spanish version (shown to people using Spanish)
+  bodyEs?: string;
+  level?: 'info' | 'warn' | 'urgent' | 'good';
+  audience?: 'all' | 'viewer' | 'editor' | 'admin'; // who sees it
+  startsAt?: number | null; // hidden before this (optional)
+  endsAt?: number | null; // hidden after this (optional)
+  popup?: boolean; // also open as a pop-up once per person
+  dismissible?: boolean; // people can hide it (default yes)
+  showOnLogin?: boolean; // also shown on the sign-in screen
+  active?: boolean; // false = paused
+  author?: string;
+}
+
+/** Shift handover note: what the next shift needs to know. */
+export interface ShiftNote extends BaseDoc {
+  text: string;
+  machine?: string;
+  shift?: string;
+  followUp?: boolean; // needs someone to act on it
+  done?: boolean;
+  doneBy?: string;
+  doneAt?: number | null;
+  author?: string;
+}
+
 export interface DocMap {
   parts: Part;
   manufacturers: Manufacturer;
@@ -259,10 +298,12 @@ export interface DocMap {
   welders: Welder;
   downtime: Downtime;
   cores: CrushedCore;
+  announcements: Announcement;
+  notes: ShiftNote;
   settings: Settings;
 }
 export type DocKind = keyof DocMap;
-export const DOC_KINDS: DocKind[] = ['parts', 'manufacturers', 'vendors', 'machines', 'equipment', 'orders', 'pms', 'mechanics', 'welders', 'downtime', 'cores', 'settings'];
+export const DOC_KINDS: DocKind[] = ['parts', 'manufacturers', 'vendors', 'machines', 'equipment', 'orders', 'pms', 'mechanics', 'welders', 'downtime', 'cores', 'announcements', 'notes', 'settings'];
 
 export interface Movement {
   id: string;
@@ -318,6 +359,11 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   welders: { name: 'str', machine: 'str', model: 'str', notes: 'text' },
   downtime: { machine: 'str', welder: 'str', startedAt: 'time', minutes: 'num', category: 'str', problem: 'text', fix: 'text', bpm: 'num', reportedBy: 'str' },
   cores: { at: 'time', tag: 'str', machine: 'str', notes: 'text', reportedBy: 'str' },
+  announcements: {
+    title: 'str', body: 'text', titleEs: 'str', bodyEs: 'text', level: 'str', audience: 'str', startsAt: 'time', endsAt: 'time',
+    popup: 'bool', dismissible: 'bool', showOnLogin: 'bool', active: 'bool', author: 'str',
+  },
+  notes: { text: 'text', machine: 'str', shift: 'str', followUp: 'bool', done: 'bool', doneBy: 'str', doneAt: 'time', author: 'str' },
   pms: { machine: 'str', date: 'str', type: 'str', doneBy: 'str', nextDue: 'str', notes: 'text' },
   equipment: {
     type: 'str', tag: 'str', status: 'str', machine: 'str', position: 'str', installedAt: 'time', lastServiceAt: 'time', pmDays: 'num',
@@ -330,7 +376,7 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   },
   settings: {
     companyName: 'str', department: 'str', categories: 'strs', locations: 'strs', units: 'strs', knifePmDays: 'num',
-    rollerPmDays: 'num', weeklyReportDay: 'num', currency: 'str', printTemplate: 'json', publicUrl: 'str', badgeLogin: 'bool', shifts: 'strs',
+    rollerPmDays: 'num', weeklyReportDay: 'num', currency: 'str', printTemplate: 'json', publicUrl: 'str', badgeLogin: 'bool', idleLogoutMin: 'num', shifts: 'strs',
   },
 };
 

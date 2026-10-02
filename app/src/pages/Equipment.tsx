@@ -92,6 +92,11 @@ export function EquipmentPage({ type, query, embedded }: { type: EquipmentType; 
     return order[a.pm.state] - order[b.pm.state] || b.pm.pct - a.pm.pct || a.e.tag.localeCompare(b.e.tag, undefined, { numeric: true });
   }), [withPm, status, pmFilter, machineFilter, sub, q]);
 
+  // "How long they last" counts every one, retired included (that's where most of the history is)
+  const lifeList = useMemo(() => items.filter((e) => (!machineFilter || e.machine === machineFilter)
+    && (!sub || e.tipType === sub || e.construction === sub || e.rollerType === sub)
+    && matches(q, e.tag, e.machine, e.position, describe(e), e.notes)), [items, machineFilter, sub, q]);
+
   const open = openId ? all[openId] : undefined;
   const subOptions = type === 'knife'
     ? [['', 'Any tip'], ['thin', 'Thin tip'], ['wide', 'Wide tip']] as [string, string][]
@@ -128,9 +133,9 @@ export function EquipmentPage({ type, query, embedded }: { type: EquipmentType; 
 
       <div className="row wrap" style={{ marginBottom: '1rem' }}>
         <SearchInput value={q} onChange={setQ} placeholder={hw(type, 'Search by tag, machine, size…', 'Search by tag, welder…')} />
-        <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={status} onChange={(e) => setQuery({ status: e.target.value === 'active' ? null : e.target.value })}>
+        {view !== 'life' && <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={status} onChange={(e) => setQuery({ status: e.target.value === 'active' ? null : e.target.value })}>
           <option value="active">{t('All (not retired)')}</option><option value="installed">{hw(type, 'On machine', 'On welder')}</option><option value="spare">{t('Spares')}</option><option value="repair">{t('In repair')}</option><option value="retired">{t('Retired')}</option><option value="all">{t('Everything')}</option>
-        </select>
+        </select>}
         <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={machineFilter} onChange={(e) => setQuery({ machine: e.target.value })}>
           <option value="">{hw(type, 'All machines', 'All welders')}</option>{machines.map((m) => <option key={m}>{m}</option>)}
         </select>
@@ -140,7 +145,7 @@ export function EquipmentPage({ type, query, embedded }: { type: EquipmentType; 
       </div>
 
       {view === 'life' ? (
-        <Lifespan type={type} list={filtered.map((x) => x.e)} onOpen={(id) => setQuery({ open: id })} />
+        <Lifespan type={type} list={lifeList} onOpen={(id) => setQuery({ open: id })} />
       ) : filtered.length === 0 ? (
         <div className="card"><Empty icon={type === 'knife' ? <Flame size={48} /> : type === 'roller' ? <CircleDot size={48} /> : <AudioWaveform size={48} />} title={items.length ? t('Nothing matches') : t('Nothing here yet.')}>
           {!items.length && canEdit && <button className="btn primary" onClick={() => setEditing('new')}><Plus />{t('Add {what}', { what: one })}</button>}

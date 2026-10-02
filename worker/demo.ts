@@ -1,5 +1,5 @@
 // Sample data so the app can be tried out before real parts are entered (Admin → System → Load demo data).
-import { REMOVAL_REASONS, type CrushedCore, type DocKind, type Downtime, type Equipment, type Machine, type Part, type PmLog, type Stint, type Vendor, type Welder } from '../shared/types';
+import { REMOVAL_REASONS, type CrushedCore, type DocKind, type Downtime, type Equipment, type Machine, type Part, type PmLog, type Stint, type Vendor, type Welder, type ShiftNote, type Announcement } from '../shared/types';
 import { addDays, addMonths, fmtDay } from '../shared/pm';
 
 const DAY = 86_400_000;
@@ -186,6 +186,18 @@ export function demoData() {
     cores.push({ id: `demo-cc${i}`, tag: String(448100 + Math.floor(rnd() * 900)), at: now - Math.floor(rnd() * 45 * DAY), machine: rnd() < 0.7 ? pick(machines.slice(4, 8)).name : '', notes: rnd() < 0.3 ? pick(['Forklift damage', 'Crushed in storage', 'Dropped off rack']) : '', reportedBy: pick(people) });
   }
 
+  // shift handover notes (a couple still need follow-up)
+  const HOUR = 3_600_000;
+  const notes: ShiftNote[] = [
+    { id: 'demo-n1', text: 'Knife on position 2 is running hot. Swapped the thermocouple, keep an eye on it.', machine: machines[4].name, shift: '1st shift (days)', followUp: true, author: people[0], createdAt: now - 2 * HOUR },
+    { id: 'demo-n2', text: 'Out of 3/4" roller bearings. Used the last one on the nip roller. Order guide started.', machine: machines[5].name, shift: '1st shift (days)', followUp: true, author: people[1], createdAt: now - 5 * HOUR },
+    { id: 'demo-n3', text: 'Ran fine all night, no stops.', shift: '3rd shift (nights)', author: people[2], createdAt: now - 14 * HOUR },
+    { id: 'demo-n4', text: 'Changed the horn on Welder 1, old one was cracked at the tip.', machine: machines[6].name, shift: '2nd shift (afternoons)', followUp: true, done: true, doneBy: people[0], doneAt: now - 20 * HOUR, author: people[3], createdAt: now - 26 * HOUR },
+  ];
+  const announcements: Announcement[] = [
+    { id: 'demo-a1', title: 'Welcome to the sample data', body: 'Everything here is made up so you can try things out. An admin can erase it under Admin → Storage & usage.', level: 'info', audience: 'all', dismissible: true, active: true, author: 'Admin' },
+  ];
+
   // ~10 months of usage history
   const movements: { partId: string; partName: string; delta: number; qtyAfter: number; kind: string; machine: string; userName: string; unitCost: number; at: number }[] = [];
   for (const p of parts.filter((x) => !x.decommissioned)) {
@@ -206,7 +218,7 @@ export function demoData() {
   }
 
   return {
-    docs: { machines, vendors, parts, equipment, pms, mechanics, welders, downtime, cores } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
+    docs: { machines, vendors, parts, equipment, pms, mechanics, welders, downtime, cores, notes, announcements } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
     movements,
   };
 }

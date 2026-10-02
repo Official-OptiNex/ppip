@@ -5,11 +5,11 @@ import { runUndo } from '../components/UndoBar';
 import { Undo2, Redo2 } from 'lucide-react';
 import { fmtDateTime, useDebounced } from '../lib/util';
 import { SearchInput, Spinner, Empty } from '../components/ui';
-import type { Activity } from '../../../shared/types';
+import { EQUIPMENT_LABEL, type Activity } from '../../../shared/types';
 import { t } from '../lib/i18n';
 import { rich } from '../components/ui';
 
-const KINDS: [string, string][] = [['', 'Everything'], ['parts', 'Parts & stock'], ['equipment', 'Knives, rollers, horns, anvils'], ['downtime', 'Downtime'], ['cores', 'Crushed cores'], ['welders', 'Sonic welders'], ['orders', 'Order guides'], ['users', 'Accounts'], ['vendors', 'Suppliers'], ['machines', 'Machines']];
+const KINDS: [string, string][] = [['', 'Everything'], ['parts', 'Parts & stock'], ['equipment', 'Knives, rollers, horns, anvils'], ['downtime', 'Downtime'], ['cores', 'Crushed cores'], ['welders', 'Sonic welders'], ['pms', 'PMs'], ['notes', 'Shift notes'], ['orders', 'Order guides'], ['users', 'Accounts'], ['vendors', 'Suppliers'], ['machines', 'Machines']];
 
 export function ActivityPage() {
   const [q, setQ] = useState('');
@@ -20,6 +20,7 @@ export function ActivityPage() {
   const canEdit = useCanEdit();
   const isAdmin = useIsAdmin();
   const meId = useStore((s) => s.me?.id);
+  const equipment = useStore((s) => s.docs.equipment);
   const dq = useDebounced(q, 250);
 
   const load = async (before?: number) => {
@@ -45,7 +46,10 @@ export function ActivityPage() {
         {!rows ? <div className="card-pad center"><Spinner /></div> : rows.length === 0 ? <Empty title="No activity found" /> : (
           <div className="list">
             {rows.map((a) => {
-              const link = a.kind === 'parts' && a.refId ? `#/parts/${a.refId}` : a.kind === 'orders' && a.refId ? `#/orders/${a.refId}` : undefined;
+              const eq = a.kind === 'equipment' && a.refId ? equipment[a.refId] : undefined;
+              const link = a.kind === 'parts' && a.refId ? `#/parts/${a.refId}` : a.kind === 'orders' && a.refId ? `#/orders/${a.refId}`
+                : eq ? `#/${EQUIPMENT_LABEL[eq.type].route}?open=${eq.id}`
+                : ({ downtime: '#/downtime', cores: '#/cores?period=all', welders: '#/welders', pms: '#/pms/history', notes: '#/notes', machines: '#/suppliers/machines', vendors: '#/suppliers', manufacturers: '#/suppliers/manufacturers', announcements: isAdmin ? '#/admin/announcements' : undefined } as Record<string, string | undefined>)[a.kind || ''];
               const canUndo = canEdit && a.undoId && !a.undone && (isAdmin || a.undoUserId === meId);
               const isRedo = a.action === 'undo';
               const undoBtn = canUndo ? (

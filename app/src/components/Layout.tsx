@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  LayoutDashboard, Package, ClipboardList, Flame, CircleDot, BarChart3, FileText, Truck, Tag, ArrowLeftRight, History, ShieldCheck, AudioWaveform, Timer, Cylinder,
+  LayoutDashboard, Package, ClipboardList, Flame, CircleDot, BarChart3, FileText, Truck, Tag, ArrowLeftRight, History, ShieldCheck, AudioWaveform, Timer, Cylinder, NotebookPen,
   HelpCircle, ChevronDown, ShoppingCart, Wrench, Sun, Moon, Bell, Menu as MenuIcon, LogOut, UserCircle2, Search, Plus, X, Wifi, WifiOff, AlertTriangle, XCircle, CheckCircle2, Info, MoreHorizontal,
 } from 'lucide-react';
 import { useStore, logout, markNotificationsSeen, can } from '../lib/store';
-import { stockStatus, matches, timeAgo, navigate, useNow } from '../lib/util';
+import { stockStatus, matches, timeAgo, navigate, useNow, fmtDateTime } from '../lib/util';
 import { usePmStates, pmDueCount } from '../lib/pmhooks';
 import { savePrefs } from '../lib/store';
 import { isFileMode, safeGet, safeSet } from '../lib/api';
@@ -14,12 +14,14 @@ import { QuickLogBubble } from './QuickLog';
 import { Logo, APP_NAME } from './Logo';
 import { EQUIPMENT_LABEL } from '../../../shared/types';
 import { BadgeNotice } from './BadgeSetup';
+import { AnnouncementBar } from './Announcements';
 import type { Part, Equipment, OrderGuide } from '../../../shared/types';
 
 type NavItem = { to: string; label: string; icon: ReactNode; admin?: boolean };
 // Everyday pages are always shown; the rest sit under "More tools" (opens automatically when you're on one).
 const NAV_MAIN: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={22} /> },
+  { to: '/notes', label: 'Shift Notes', icon: <NotebookPen size={22} /> },
   { to: '/parts', label: 'Parts', icon: <Package size={22} /> },
   { to: '/orders', label: 'Order Guides', icon: <ClipboardList size={22} /> },
   { to: '/pms', label: 'PMs', icon: <Wrench size={22} /> },
@@ -53,6 +55,8 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
   const me = useStore((s) => s.me);
   const settings = useStore((s) => s.settings);
   const parts = useStore((s) => s.docs.parts);
+  const notes = useStore((s) => s.docs.notes);
+  const openNotes = useMemo(() => Object.values(notes).filter((n) => n.followUp && !n.done).length, [notes]);
   const pmStates = usePmStates();
   const pmDue = pmDueCount(pmStates);
   const pmOverdue = pmStates.some((s) => s.status === 'overdue');
@@ -68,6 +72,7 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
   useEffect(() => { safeSet('ppip.navMore', moreOpen ? '1' : '0'); }, [moreOpen]);
   const navLink = (n: NavItem) => {
     const badge = n.to === '/parts' ? (counts.out ? <span className="count danger" title={t('Out of stock or order now')}>{counts.out}</span> : counts.low ? <span className="count warn" title={t('Running low')}>{counts.low}</span> : null)
+      : n.to === '/notes' && openNotes ? <span className="count warn" title={t('Needs follow-up')}>{openNotes}</span>
       : n.to === '/pms' && pmDue ? <span className={`count ${pmOverdue ? 'danger' : 'warn'}`} title={t('PMs due')}>{pmDue}</span> : null;
     return (
       <a key={n.to} href={`#${n.to}`} className={isActive(n.to, path) ? 'active' : ''} aria-current={isActive(n.to, path) ? 'page' : undefined}>
@@ -115,9 +120,11 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
             <Presence />
             <ThemeToggle />
             <Notifications />
+            <button className="btn signout" onClick={() => logout()} title={t('Sign out')} aria-label={t('Sign out')} data-tour="signout"><LogOut size={20} /><span className="signout-label">{t('Sign out')}</span></button>
           </div>
         </header>
         <BadgeNotice />
+        <AnnouncementBar />
         <main className="content" id="main">{children}</main>
       </div>
 
@@ -243,6 +250,8 @@ function Notifications() {
   );
 }
 
+type MoreHit = { id: string; to: string; icon: ReactNode; title: string; sub: string };
+
 function GlobalSearch() {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -250,6 +259,9 @@ function GlobalSearch() {
   const parts = useStore((s) => s.docs.parts);
   const equipment = useStore((s) => s.docs.equipment);
   const orders = useStore((s) => s.docs.orders);
+  const welders = useStore((s) => s.docs.welders);
+  const cores = useStore((s) => s.docs.cores);
+  const notes = useStore((s) => s.docs.notes);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
 
@@ -270,17 +282,27 @@ function GlobalSearch() {
   }, [open]);
 
   const results = useMemo(() => {
-    if (!q.trim()) return { parts: [] as Part[], eq: [] as Equipment[], orders: [] as OrderGuide[] };
+    if (!q.trim()) return { parts: [] as Part[], eq: [] as Equipment[], orders: [] as OrderGuide[], more: [] as MoreHit[] };
+    const qs = encodeURIComponent(q.trim());
     return {
       parts: Object.values(parts).filter((p) => matches(q, p.name, p.partNumber, p.manufacturer, p.vendorPartNumber, p.location, p.category, p.description, p.machines?.join(' '))).slice(0, 8),
       eq: Object.values(equipment).filter((e) => matches(q, e.tag, e.machine, e.position, EQUIPMENT_LABEL[e.type].one, e.partNumber, e.notes)).slice(0, 5),
       orders: Object.values(orders).filter((o) => matches(q, o.number, o.title, o.requestedBy, o.items.map((i) => `${i.name} ${i.partNumber}`).join(' '))).slice(0, 4),
+      more: [
+        ...Object.values(welders).filter((w) => matches(q, w.name, w.machine, w.model)).slice(0, 3)
+          .map((w): MoreHit => ({ id: w.id, to: '/welders', icon: <AudioWaveform size={19} />, title: w.name, sub: [t('Sonic welder'), w.machine].filter(Boolean).join(' · ') })),
+        ...Object.values(cores).filter((c) => matches(q, c.tag, c.machine, c.notes)).sort((a, b) => b.at - a.at).slice(0, 3)
+          .map((c): MoreHit => ({ id: c.id, to: `/cores?period=all&q=${encodeURIComponent(c.tag)}`, icon: <Cylinder size={19} />, title: c.tag, sub: [t('Crushed core'), fmtDateTime(c.at), c.machine].filter(Boolean).join(' · ') })),
+        ...Object.values(notes).filter((n) => matches(q, n.text, n.machine, n.author)).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 3)
+          .map((n): MoreHit => ({ id: n.id, to: `/notes?q=${qs}`, icon: <NotebookPen size={19} />, title: n.text.length > 70 ? `${n.text.slice(0, 70)}…` : n.text, sub: [t('Shift note'), n.author, timeAgo(n.createdAt)].filter(Boolean).join(' · ') })),
+      ],
     };
-  }, [q, parts, equipment, orders]);
+  }, [q, parts, equipment, orders, welders, cores, notes]);
   const flat = [
     ...results.parts.map((p) => `/parts/${p.id}`),
     ...results.eq.map((e) => `/${EQUIPMENT_LABEL[e.type].route}?open=${e.id}`),
     ...results.orders.map((o) => `/orders/${o.id}`),
+    ...results.more.map((m) => m.to),
   ];
   const go = (to: string) => { navigate(to); setOpen(false); setQ(''); inputRef.current?.blur(); };
   let idx = -1;
@@ -289,7 +311,7 @@ function GlobalSearch() {
     <div className="grow pop-anchor" ref={wrap} style={{ maxWidth: 640 }} data-tour="search">
       <div className="input-wrap">
         <Search size={20} />
-        <input ref={inputRef} className="input" value={q} placeholder={t('Search parts, part #, knives, rollers, orders…')} aria-label={t('Search everything')}
+        <input ref={inputRef} className="input" value={q} placeholder={t('Search parts, knives, rollers, orders, cores, notes…')} aria-label={t('Search everything')}
           style={{ minHeight: '2.9rem' }}
           onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); }} onFocus={() => setOpen(true)}
           onKeyDown={(e) => {
@@ -334,6 +356,16 @@ function GlobalSearch() {
               <button key={o.id} className="list-item" style={{ background: active === i ? 'var(--primary-soft)' : undefined }} onMouseEnter={() => setActive(i)} onClick={() => go(`/orders/${o.id}`)}>
                 <span className="li-icon"><ClipboardList size={19} /></span>
                 <div className="grow"><b>{o.number}</b> · {o.title}<div className="small muted">{plural(o.items.length, '{n} item', '{n} items')} · {t(o.status)}</div></div>
+              </button>
+            );
+          })}
+          {results.more.length > 0 && <div className="search-group">{t('Welders, cores & notes')}</div>}
+          {results.more.map((m) => {
+            idx++; const i = idx;
+            return (
+              <button key={m.id} className="list-item" style={{ background: active === i ? 'var(--primary-soft)' : undefined }} onMouseEnter={() => setActive(i)} onClick={() => go(m.to)}>
+                <span className="li-icon">{m.icon}</span>
+                <div className="grow" style={{ minWidth: 0 }}><b className="ellipsis" style={{ display: 'block' }}>{m.title}</b><div className="small muted ellipsis">{m.sub}</div></div>
               </button>
             );
           })}
