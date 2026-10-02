@@ -158,8 +158,8 @@ function UserForm({ user, onClose, onSaved }: { user: Partial<PublicUser>; onClo
         <div className="grid-2">
           <Field label="Name" required hint="Can be used to sign in — must be unique"><input className="input" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus /></Field>
           <Field label="Email" required><input className="input" type="email" value={d.email} onChange={(e) => setD({ ...d, email: e.target.value })} /></Field>
-          <Field label="Badge number (optional)" hint="Click here and scan their badge, or type it (2–8 digits). Lets them sign in with one scan." className="span-2">
-            <input className="input mono" value={d.badge} inputMode="numeric" autoComplete="off" placeholder="Scan or type" onChange={(e) => setD({ ...d, badge: e.target.value.replace(/\D/g, '').slice(0, 8) })}
+          <Field label="Badge ID (optional)" hint="Click here and scan their badge, or type the ID exactly as printed (letters and symbols like 7A:018 are fine). Lets them sign in with one scan." className="span-2">
+            <input className="input mono" value={d.badge} autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder="Scan or type" onChange={(e) => setD({ ...d, badge: e.target.value.slice(0, 40) })}
               onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); /* scanners press Enter — don't submit the form */ }} />
           </Field>
         </div>

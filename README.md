@@ -14,7 +14,7 @@ A private, live-updating web app for a maintenance / process engineering departm
 - **Import / export**: Excel (.xlsx) and CSV import with automatic column matching, plus Excel, CSV and full JSON export.
 - **QR labels**: 4×6 thermal labels (e.g. Zebra GK420d, tall or sideways) or a letter sheet; scanning one with a phone opens that part.
 - **Phone photos**: on a PC, click "Take photo with phone", scan the QR code, snap a picture, and it appears on the PC.
-- **Badge sign-in**: link a 2–8 digit employee badge to an account; at the sign-in screen just scan it (keyboard-wedge scanners work with no clicking) or type the number. Admins set badges when creating/editing accounts; users can add their own.
+- **Badge sign-in**: link an employee badge ID (any letters, numbers or symbols, e.g. `7A:018`) to an account; at the sign-in screen just scan it (keyboard-wedge scanners work with no clicking) or type the number. Admins set badges when creating/editing accounts; users can add their own.
 - **Mechanics & shifts**: admins keep the list of mechanics and their shift; PM "who did it" picks from it and PM history can be filtered by shift.
 - **Header clock**: local time and date on every page.
 - **Accounts**: Viewer, Editor and Admin roles. The admin panel covers users, storage and usage, signed-in devices, backups and settings.

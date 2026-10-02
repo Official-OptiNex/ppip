@@ -1,9 +1,9 @@
 // Linking an employee badge to your own account, plus the reminder bar shown until you do.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ScanLine, X, IdCard } from 'lucide-react';
 import { api, errorMessage, safeGet, safeSet } from '../lib/api';
 import { setState, toast, useStore } from '../lib/store';
-import { maskBadge } from '../lib/badge';
+import { cleanBadge, maskBadge } from '../lib/badge';
 import { Field, Modal } from './ui';
 
 export function BadgeDialog({ onClose }: { onClose: () => void }) {
@@ -11,8 +11,10 @@ export function BadgeDialog({ onClose }: { onClose: () => void }) {
   const [badge, setBadge] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const save = async (value = badge) => {
-    if (value.length < 2) { setErr('Badge numbers are 2 to 8 digits.'); return; }
+  const inputRef = useRef<HTMLInputElement>(null);
+  const save = async (raw = inputRef.current?.value ?? badge) => {
+    const value = cleanBadge(raw);
+    if (!value) { setErr('Scan your badge or type the ID.'); return; }
     setBusy(true); setErr('');
     try {
       const r = await api<{ badge: string | null }>('/me/badge', { method: 'PUT', body: { badge: value } });
@@ -23,15 +25,15 @@ export function BadgeDialog({ onClose }: { onClose: () => void }) {
   };
   return (
     <Modal title="Link your badge" icon={<IdCard color="var(--primary)" />} onClose={onClose}
-      footer={<><button className="btn lg" onClick={onClose}>Cancel</button><button className="btn primary lg" onClick={() => save()} disabled={busy || badge.length < 2}>{busy ? 'Saving…' : 'Save badge'}</button></>}>
+      footer={<><button className="btn lg" onClick={onClose}>Cancel</button><button className="btn primary lg" onClick={() => save()} disabled={busy || !badge.trim()}>{busy ? 'Saving…' : 'Save badge'}</button></>}>
       <form className="stack" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <div className="row" style={{ gap: '1rem' }}>
           <div className="badge-icon"><ScanLine size={32} /></div>
           <div style={{ fontSize: '1.05rem' }}><b>Scan your badge now</b>, or type the number. After this you can sign in on any computer with one scan.</div>
         </div>
-        <Field label="Badge number">
-          <input className="input mono" value={badge} autoFocus inputMode="numeric" autoComplete="off" placeholder="Scan or type"
-            onChange={(e) => setBadge(e.target.value.replace(/\D/g, '').slice(0, 8))} style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
+        <Field label="Badge ID">
+          <input ref={inputRef} className="input mono" value={badge} autoFocus autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder="Scan or type (e.g. 7A:018)"
+            onChange={(e) => setBadge(e.target.value.slice(0, 40))} style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
         </Field>
         {err && <div className="banner danger">{err}</div>}
       </form>
