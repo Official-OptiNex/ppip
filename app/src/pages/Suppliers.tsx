@@ -4,14 +4,15 @@ import { buildOrderUrl, type Machine, type Manufacturer, type Vendor } from '../
 import { deleteDoc, newId, saveDoc, toast, toastError, useCanEdit, useIsAdmin, useStore } from '../lib/store';
 import { matches, navigate, uniqueSorted } from '../lib/util';
 import { Empty, Field, Modal, NumberInput, SearchInput, Tabs, TagInput, confirmDialog } from '../components/ui';
+import { t } from '../lib/i18n';
 
 type Tab = 'suppliers' | 'manufacturers' | 'machines' | 'lists';
 
-export function SuppliersPage({ tab: t }: { tab?: string }) {
-  const tab = (['suppliers', 'manufacturers', 'machines', 'lists'].includes(t || '') ? t : 'suppliers') as Tab;
+export function SuppliersPage({ tab: tabArg }: { tab?: string }) {
+  const tab = (['suppliers', 'manufacturers', 'machines', 'lists'].includes(tabArg || '') ? tabArg : 'suppliers') as Tab;
   return (
     <div>
-      <div className="page-head"><div><h1>Suppliers & Lists</h1><div className="sub">Suppliers, manufacturers (with automatic order links), machines and dropdown lists.</div></div></div>
+      <div className="page-head"><div><h1>{t('Suppliers & Lists')}</h1><div className="sub">{t('Suppliers, manufacturers (with automatic order links), machines and dropdown lists.')}</div></div></div>
       <Tabs value={tab} onChange={(v) => navigate(`/suppliers/${v}`, true)} tabs={[
         { id: 'suppliers', label: 'Suppliers / vendors' }, { id: 'manufacturers', label: 'Manufacturers' }, { id: 'machines', label: 'Machines' }, { id: 'lists', label: 'Dropdown lists' },
       ]} />
@@ -33,8 +34,8 @@ function usePartCounts(field: 'vendor' | 'manufacturer') {
 }
 
 async function removeNamed(kind: 'vendors' | 'manufacturers' | 'machines', id: string, name: string, used: number) {
-  if (!(await confirmDialog({ title: `Delete “${name}”?`, body: used ? `${used} part${used > 1 ? 's' : ''} still reference it. They keep the name as text.` : 'This cannot be undone.', confirm: 'Delete', danger: true }))) return;
-  try { await deleteDoc(kind, id); toast('Deleted'); } catch (e) { toastError(e); }
+  if (!(await confirmDialog({ title: t('Delete “{name}”?', { name }), body: used ? t('{n} parts still reference it. They keep the name as text.', { n: used }) : t('This cannot be undone.'), confirm: t('Delete'), danger: true }))) return;
+  try { await deleteDoc(kind, id); toast(t('Deleted')); } catch (e) { toastError(e); }
 }
 
 function VendorsTab() {
@@ -49,19 +50,19 @@ function VendorsTab() {
     <div>
       <div className="row" style={{ marginBottom: '1rem' }}>
         <SearchInput value={q} onChange={setQ} placeholder="Search suppliers…" />
-        {canEdit && <button className="btn primary lg" onClick={() => setEdit({})}><Plus />Add supplier</button>}
+        {canEdit && <button className="btn primary lg" onClick={() => setEdit({})}><Plus />{t('Add supplier')}</button>}
       </div>
-      {list.length === 0 ? <div className="card"><Empty title="No suppliers yet">Suppliers are also added automatically when you type a new one on a part.</Empty></div> : (
+      {list.length === 0 ? <div className="card"><Empty title="No suppliers yet">{t('Suppliers are also added automatically when you type a new one on a part.')}</Empty></div> : (
         <div className="table-wrap">
           <table className="tbl">
-            <thead><tr><th>Supplier</th><th>Contact</th><th className="num">Lead time</th><th>Account #</th><th className="num">Parts</th><th /></tr></thead>
+            <thead><tr><th>{t('Supplier')}</th><th>{t('Contact')}</th><th className="num">{t('Lead time')}</th><th>{t('Account #')}</th><th className="num">{t('Parts')}</th><th /></tr></thead>
             <tbody>
               {list.map((v) => (
                 <tr key={v.id}>
                   <td>
-                    <b>{v.name}</b>{v.preferred && <span className="pill ok" style={{ marginLeft: 8 }}><Star size={13} />Preferred</span>}
+                    <b>{v.name}</b>{v.preferred && <span className="pill ok" style={{ marginLeft: 8 }}><Star size={13} />{t('Preferred')}</span>}
                     {v.website && <div className="small"><a href={v.website} target="_blank" rel="noreferrer">{v.website.replace(/^https?:\/\//, '')} <ExternalLink size={12} /></a></div>}
-                    {v.urlTemplate && <div className="small muted">Auto order links ✓</div>}
+                    {v.urlTemplate && <div className="small muted">{t('Auto order links ✓')}</div>}
                   </td>
                   <td className="small">
                     {v.contactName && <div>{v.contactName}</div>}
@@ -73,8 +74,8 @@ function VendorsTab() {
                   <td className="mono">{v.accountNumber || '—'}</td>
                   <td className="num"><a href={`#/parts?vendor=${encodeURIComponent(v.name)}`}>{counts.get(v.name) || 0}</a></td>
                   <td>{canEdit && <div className="row" style={{ justifyContent: 'flex-end' }}>
-                    <button className="btn sm" onClick={() => setEdit(v)}><Pencil size={16} />Edit</button>
-                    <button className="btn sm icon ghost" onClick={() => removeNamed('vendors', v.id, v.name, counts.get(v.name) || 0)} aria-label="Delete"><Trash2 size={17} /></button>
+                    <button className="btn sm" onClick={() => setEdit(v)}><Pencil size={16} />{t('Edit')}</button>
+                    <button className="btn sm icon ghost" onClick={() => removeNamed('vendors', v.id, v.name, counts.get(v.name) || 0)} aria-label={t('Delete')}><Trash2 size={17} /></button>
                   </div>}</td>
                 </tr>
               ))}
@@ -98,12 +99,12 @@ function ManufacturersTab() {
     <div>
       <div className="row" style={{ marginBottom: '1rem' }}>
         <SearchInput value={q} onChange={setQ} placeholder="Search manufacturers…" />
-        {canEdit && <button className="btn primary lg" onClick={() => setEdit({})}><Plus />Add manufacturer</button>}
+        {canEdit && <button className="btn primary lg" onClick={() => setEdit({})}><Plus />{t('Add manufacturer')}</button>}
       </div>
-      <p className="muted">These fill the manufacturer dropdown. A <b>link pattern</b> like <span className="mono">https://www.mcmaster.com/{'{pn}'}</span> builds the order link automatically from the part number.</p>
+      <p className="muted">{t('These fill the manufacturer dropdown. A link pattern like https://www.mcmaster.com/{pn} builds the order link automatically from the part number.')}</p>
       <div className="table-wrap">
         <table className="tbl">
-          <thead><tr><th>Manufacturer</th><th>Order link pattern</th><th className="num">Parts</th><th /></tr></thead>
+          <thead><tr><th>{t('Manufacturer')}</th><th>{t('Order link pattern')}</th><th className="num">{t('Parts')}</th><th /></tr></thead>
           <tbody>
             {list.map((m) => (
               <tr key={m.id}>
@@ -111,8 +112,8 @@ function ManufacturersTab() {
                 <td className="mono small" style={{ wordBreak: 'break-all' }}>{m.urlTemplate || <span className="muted">—</span>}</td>
                 <td className="num"><a href={`#/parts?mfr=${encodeURIComponent(m.name)}`}>{counts.get(m.name) || 0}</a></td>
                 <td>{canEdit && <div className="row" style={{ justifyContent: 'flex-end' }}>
-                  <button className="btn sm" onClick={() => setEdit(m)}><Pencil size={16} />Edit</button>
-                  <button className="btn sm icon ghost" onClick={() => removeNamed('manufacturers', m.id, m.name, counts.get(m.name) || 0)} aria-label="Delete"><Trash2 size={17} /></button>
+                  <button className="btn sm" onClick={() => setEdit(m)}><Pencil size={16} />{t('Edit')}</button>
+                  <button className="btn sm icon ghost" onClick={() => removeNamed('manufacturers', m.id, m.name, counts.get(m.name) || 0)} aria-label={t('Delete')}><Trash2 size={17} /></button>
                 </div>}</td>
               </tr>
             ))}
@@ -136,13 +137,13 @@ function MachinesTab() {
   return (
     <div>
       <div className="row" style={{ marginBottom: '1rem', justifyContent: 'space-between' }}>
-        <p className="muted" style={{ margin: 0 }}>Machines appear in the “used on” and hot knife / roller dropdowns. Renaming a machine updates every part and knife/roller.</p>
-        {canEdit && <button className="btn primary lg" onClick={() => setEdit({})}><Plus />Add machine</button>}
+        <p className="muted" style={{ margin: 0 }}>{t('Machines appear in the “used on” and hot knife / roller dropdowns. Renaming a machine updates every part, knife, roller, PM and downtime entry.')}</p>
+        {canEdit && <button className="btn primary lg" onClick={() => setEdit({})}><Plus />{t('Add machine')}</button>}
       </div>
       {list.length === 0 ? <div className="card"><Empty title="No machines yet" /></div> : (
         <div className="table-wrap">
           <table className="tbl">
-            <thead><tr><th>Machine</th><th>Area / line</th><th className="num">Parts</th><th className="num">Knives & rollers on it</th><th /></tr></thead>
+            <thead><tr><th>{t('Machine')}</th><th>{t('Area / line')}</th><th className="num">{t('Parts')}</th><th className="num">{t('Knives & rollers on it')}</th><th /></tr></thead>
             <tbody>
               {list.map((m) => (
                 <tr key={m.id}>
@@ -151,8 +152,8 @@ function MachinesTab() {
                   <td className="num"><a href={`#/parts?machine=${encodeURIComponent(m.name)}`}>{partCount(m.name)}</a></td>
                   <td className="num">{eqCount(m.name)}</td>
                   <td>{canEdit && <div className="row" style={{ justifyContent: 'flex-end' }}>
-                    <button className="btn sm" onClick={() => setEdit(m)}><Pencil size={16} />Edit</button>
-                    <button className="btn sm icon ghost" onClick={() => removeNamed('machines', m.id, m.name, partCount(m.name))} aria-label="Delete"><Trash2 size={17} /></button>
+                    <button className="btn sm" onClick={() => setEdit(m)}><Pencil size={16} />{t('Edit')}</button>
+                    <button className="btn sm icon ghost" onClick={() => removeNamed('machines', m.id, m.name, partCount(m.name))} aria-label={t('Delete')}><Trash2 size={17} /></button>
                   </div>}</td>
                 </tr>
               ))}
@@ -170,24 +171,24 @@ function NamedForm({ kind, item, onClose }: { kind: 'vendors' | 'manufacturers' 
   const [busy, setBusy] = useState(false);
   const all = useStore((s) => s.docs[kind]);
   const set = (k: string, v: unknown) => setD((x) => ({ ...x, [k]: v }));
-  const label = kind === 'vendors' ? 'supplier' : kind === 'manufacturers' ? 'manufacturer' : 'machine';
+  const label = t(kind === 'vendors' ? 'supplier' : kind === 'manufacturers' ? 'manufacturer' : 'machine');
   const dup = d.name && Object.values(all).some((x) => x.id !== d.id && x.name.toLowerCase() === d.name!.trim().toLowerCase());
   const save = async () => {
-    if (!d.name?.trim()) { toast('Enter a name', 'danger'); return; }
-    if (d.urlTemplate && !d.urlTemplate.includes('{pn}')) { toast('The link pattern must include {pn}', 'danger', 'That is where the part number goes.'); return; }
+    if (!d.name?.trim()) { toast(t('Enter a name'), 'danger'); return; }
+    if (d.urlTemplate && !d.urlTemplate.includes('{pn}')) { toast(t('The link pattern must include {pn}'), 'danger', t('That is where the part number goes.')); return; }
     setBusy(true);
-    try { await saveDoc(kind, d.id || newId(), d); toast('Saved'); onClose(); } catch (e) { toastError(e); } finally { setBusy(false); }
+    try { await saveDoc(kind, d.id || newId(), d); toast(t('Saved')); onClose(); } catch (e) { toastError(e); } finally { setBusy(false); }
   };
   return (
-    <Modal title={d.id ? `Edit ${label}` : `Add ${label}`} onClose={onClose} footer={<><button className="btn lg" onClick={onClose}>Cancel</button><button className="btn primary lg" onClick={save} disabled={busy}><Save />Save</button></>}>
+    <Modal title={d.id ? t('Edit {tag}', { tag: label }) : t('Add {what}', { what: label })} onClose={onClose} footer={<><button className="btn lg" onClick={onClose}>{t('Cancel')}</button><button className="btn primary lg" onClick={save} disabled={busy}><Save />{t('Save')}</button></>}>
       <form className="stack" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <Field label="Name" required><input className="input" value={d.name || ''} onChange={(e) => set('name', e.target.value)} autoFocus /></Field>
-        {dup && <div className="banner warn">A {label} with this name already exists.</div>}
+        {dup && <div className="banner warn">{t('That name already exists.')}</div>}
         {kind === 'machines' ? <>
-          <Field label="Area / line"><input className="input" value={d.area || ''} onChange={(e) => set('area', e.target.value)} placeholder="e.g. Converting" /></Field>
+          <Field label="Area / line"><input className="input" value={d.area || ''} onChange={(e) => set('area', e.target.value)} placeholder={t('e.g. Converting')} /></Field>
         </> : <>
           <Field label="Website"><input className="input" value={d.website || ''} onChange={(e) => set('website', e.target.value)} placeholder="https://…" /></Field>
-          <Field label="Order link pattern (optional)" hint={<>Search or product page address with <b className="mono">{'{pn}'}</b> where the part number goes. Example: <span className="mono">https://www.grainger.com/search?searchQuery={'{pn}'}</span>{d.urlTemplate?.includes('{pn}') && <><br />Test: <a href={buildOrderUrl(d.urlTemplate, '6204-2RS')} target="_blank" rel="noreferrer">{buildOrderUrl(d.urlTemplate, '6204-2RS')}</a></>}</>}>
+          <Field label="Order link pattern (optional)" hint={<>{t('Search or product page address with {pn} where the part number goes. Example:')} <span className="mono">https://www.grainger.com/search?searchQuery={'{pn}'}</span>{d.urlTemplate?.includes('{pn}') && <><br />{t('Test:')} <a href={buildOrderUrl(d.urlTemplate, '6204-2RS')} target="_blank" rel="noreferrer">{buildOrderUrl(d.urlTemplate, '6204-2RS')}</a></>}</>}>
             <input className="input mono" value={d.urlTemplate || ''} onChange={(e) => set('urlTemplate', e.target.value)} placeholder="https://example.com/search?q={pn}" />
           </Field>
         </>}
@@ -199,7 +200,7 @@ function NamedForm({ kind, item, onClose }: { kind: 'vendors' | 'manufacturers' 
             <Field label="Our account #"><input className="input mono" value={d.accountNumber || ''} onChange={(e) => set('accountNumber', e.target.value)} /></Field>
             <Field label="Typical lead time (days)"><NumberInput value={d.leadTimeDays} onChange={(v) => set('leadTimeDays', v)} min={0} /></Field>
           </div>
-          <label className="check"><input type="checkbox" checked={!!d.preferred} onChange={(e) => set('preferred', e.target.checked)} />Preferred supplier</label>
+          <label className="check"><input type="checkbox" checked={!!d.preferred} onChange={(e) => set('preferred', e.target.checked)} />{t('Preferred supplier')}</label>
         </>}
         <Field label="Notes"><textarea className="input" value={d.notes || ''} onChange={(e) => set('notes', e.target.value)} /></Field>
       </form>
@@ -216,18 +217,18 @@ function ListsTab() {
   const used = useMemo(() => ({
     categories: uniqueSorted(Object.values(parts).map((p) => p.category)), locations: uniqueSorted(Object.values(parts).map((p) => p.location)), units: uniqueSorted(Object.values(parts).map((p) => p.unit)),
   }), [parts]);
-  const save = async () => { setBusy(true); try { await saveDoc('settings', 'app', d); toast('Lists saved'); } catch (e) { toastError(e); } finally { setBusy(false); } };
-  if (!isAdmin) return <div className="banner info">Only admins can change the dropdown lists. You can still type any new value when editing a part.</div>;
+  const save = async () => { setBusy(true); try { await saveDoc('settings', 'app', d); toast(t('Lists saved')); } catch (e) { toastError(e); } finally { setBusy(false); } };
+  if (!isAdmin) return <div className="banner info">{t('Only admins can change the dropdown lists. You can still type any new value when editing a part.')}</div>;
   return (
     <div className="stack">
-      <p className="muted">These are suggestions in the dropdowns. People can still type something new on a part.</p>
+      <p className="muted">{t('These are suggestions in the dropdowns. People can still type something new on a part.')}</p>
       {(['categories', 'locations', 'units'] as const).map((k) => (
         <div key={k} className="card card-pad">
-          <h3 style={{ marginBottom: '0.7rem', textTransform: 'capitalize' }}>{k === 'locations' ? 'Storage locations' : k}</h3>
-          <TagInput values={d[k]} onChange={(v) => setD({ ...d, [k]: v })} options={used[k].filter((x) => !d[k].includes(x))} placeholder={`Add ${k.slice(0, -1)} and press Enter`} />
+          <h3 style={{ marginBottom: '0.7rem' }}>{t(k === 'locations' ? 'Storage locations' : k === 'units' ? 'Units' : 'Categories')}</h3>
+          <TagInput values={d[k]} onChange={(v) => setD({ ...d, [k]: v })} options={used[k].filter((x) => !d[k].includes(x))} placeholder={t('Type and press Enter')} />
         </div>
       ))}
-      <div><button className="btn primary lg" onClick={save} disabled={busy}><Save />Save lists</button></div>
+      <div><button className="btn primary lg" onClick={save} disabled={busy}><Save />{t('Save lists')}</button></div>
     </div>
   );
 }

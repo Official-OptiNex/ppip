@@ -5,6 +5,8 @@ import { api, errorMessage, isFileMode, serverUrl, setServerUrl } from '../lib/a
 import { cleanBadge, useBadgeCapture } from '../lib/badge';
 import { Field, Spinner } from '../components/ui';
 import { Logo, APP_NAME } from '../components/Logo';
+import { LangSwitch } from '../components/LangSwitch';
+import { t } from '../lib/i18n';
 
 export function Login() {
   const [name, setName] = useState('');
@@ -27,7 +29,7 @@ export function Login() {
 
   const checkServer = () => {
     if (!isFileMode) return true;
-    if (!/^https?:\/\//.test(server.trim())) { setErr('Enter the web address of your Process Engineer site (starts with https://).'); return false; }
+    if (!/^https?:\/\//.test(server.trim())) { setErr(t('Enter the web address of your Process Engineer site (starts with https://).')); return false; }
     setServerUrl(server);
     return true;
   };
@@ -42,7 +44,7 @@ export function Login() {
     try {
       await login('', '', value);
     } catch (e) {
-      setErr(errorMessage(e));
+      setErr(t(errorMessage(e)));
       setBadge('');
       setBusy('');
       badgeRef.current?.focus();
@@ -86,7 +88,7 @@ export function Login() {
     setErr('');
     if (!checkServer()) return;
     setBusy('password');
-    try { await login(name, pw); setWelcome(name); } catch (e2) { setErr(errorMessage(e2)); setBusy(''); }
+    try { await login(name, pw); setWelcome(name); } catch (e2) { setErr(t(errorMessage(e2))); setBusy(''); }
   };
 
   return (
@@ -94,23 +96,24 @@ export function Login() {
       <div className="login-art">
         <div className="row" style={{ gap: '0.8rem' }}><Logo size={52} /><b style={{ fontSize: '1.45rem', letterSpacing: '-0.01em' }}>{APP_NAME}</b></div>
         <div>
-          <h1>Every part. Every machine.<br />Always up to date.</h1>
+          <h1>{t('Every part. Every machine.')}<br />{t('Always up to date.')}</h1>
           <ul>
-            <li><Package /> Find any part in seconds — see what's in stock</li>
-            <li><Bell /> Automatic low-stock and out-of-stock alerts</li>
-            <li><Flame /> Machine PMs, hot knives and rollers</li>
-            <li><Printer /> Typed, printable order guides</li>
-            <li><Wifi /> Live on every screen — no refresh needed</li>
+            <li><Package /> {t("Find any part in seconds — see what's in stock")}</li>
+            <li><Bell /> {t('Automatic low-stock and out-of-stock alerts')}</li>
+            <li><Flame /> {t('Machine PMs, hot knives, rollers and sonic welders')}</li>
+            <li><Printer /> {t('Typed, printable order guides and labels')}</li>
+            <li><Wifi /> {t('Live on every screen — no refresh needed')}</li>
           </ul>
         </div>
-        <div style={{ opacity: 0.75, fontSize: '0.9rem' }}>Private tool · accounts are created by an admin</div>
+        <div style={{ opacity: 0.75, fontSize: '0.9rem' }}>{t('Private tool · accounts are created by an admin')}</div>
       </div>
       <div className="login-form">
         <div className="login-card stack">
           <div className="row mobile-login-brand" style={{ gap: '0.8rem', justifyContent: 'center' }}><Logo size={48} /><b style={{ fontSize: '1.4rem' }}>{APP_NAME}</b></div>
+          <LangSwitch />
           {isFileMode && (
             <div className="card card-pad">
-              <Field label={<span className="row" style={{ gap: 6 }}><Server size={16} />Server address</span>} hint="Running from USB. This is the web address of your Process Engineer site.">
+              <Field label={<span className="row" style={{ gap: 6 }}><Server size={16} />{t('Server address')}</span>} hint="Running from USB. This is the web address of your Process Engineer site.">
                 <input className="input" value={server} onChange={(e) => setServer(e.target.value)} placeholder="https://ppip.yourname.workers.dev" />
               </Field>
             </div>
@@ -121,41 +124,41 @@ export function Login() {
               <div className="row" style={{ gap: '1rem' }}>
                 <div className={`badge-icon ${busy === 'badge' ? 'busy' : ''}`}>{busy === 'badge' ? <Spinner /> : <ScanLine size={34} />}</div>
                 <div>
-                  <h1 style={{ fontSize: '1.5rem' }}>Scan your badge</h1>
+                  <h1 style={{ fontSize: '1.5rem' }}>{t('Scan your badge')}</h1>
                   <div className="row small" style={{ gap: 6, marginTop: 4 }}>
-                    {busy === 'badge' ? <span style={{ fontWeight: 700 }}>Signing in…</span> : <><span className="dot ok ready-pulse" /><span className="muted" style={{ fontWeight: 600 }}>Ready — just scan, no clicking needed</span></>}
+                    {busy === 'badge' ? <span style={{ fontWeight: 700 }}>{t('Signing in…')}</span> : <><span className="dot ok ready-pulse" /><span className="muted" style={{ fontWeight: 600 }}>{t('Ready — just scan, no clicking needed')}</span></>}
                   </div>
                 </div>
               </div>
               <Field label="Or type your badge ID">
                 <div className="row">
                   <input ref={badgeRef} className="input grow mono" value={badge} onChange={(e) => setBadge(e.target.value.slice(0, 40))} onKeyDown={onBadgeKey}
-                    autoComplete="off" autoCapitalize="off" spellCheck={false} autoFocus placeholder="e.g. 7A:018" aria-label="Badge number" style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
-                  <button className="btn primary lg" disabled={!!busy || !badge.trim()}><LogIn size={20} />Go</button>
+                    autoComplete="off" autoCapitalize="off" spellCheck={false} autoFocus placeholder={t('e.g. 7A:018')} aria-label={t('Badge number')} style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
+                  <button className="btn primary lg" disabled={!!busy || !badge.trim()}><LogIn size={20} />{t('Go')}</button>
                 </div>
               </Field>
             </form>
           )}
 
-          {badgeOn && <div className="or-divider"><span>or sign in with your name</span></div>}
+          {badgeOn && <div className="or-divider"><span>{t('or sign in with your name')}</span></div>}
 
           <form className="card card-pad stack" onSubmit={submitPassword} style={{ padding: '1.6rem' }}>
-            {!badgeOn && <div><h1>Sign in</h1><p className="muted" style={{ marginTop: '0.4rem' }}>Use your email or your name, and your password.</p></div>}
+            {!badgeOn && <div><h1>{t('Sign in')}</h1><p className="muted" style={{ marginTop: '0.4rem' }}>{t('Use your email or your name, and your password.')}</p></div>}
             <Field label="Email or name">
               <input ref={nameRef} className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="username" autoFocus={!badgeOn} required style={{ minHeight: '3.1rem' }} />
             </Field>
             <Field label="Password">
               <div className="input-wrap">
                 <input ref={pwRef} className="input" type={show ? 'text' : 'password'} value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required style={{ minHeight: '3.1rem', paddingLeft: '0.8rem', paddingRight: '3rem' }} />
-                <button type="button" className="btn icon ghost clear" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? <EyeOff size={20} /> : <Eye size={20} />}</button>
+                <button type="button" className="btn icon ghost clear" onClick={() => setShow(!show)} aria-label={show ? t('Hide password') : t('Show password')}>{show ? <EyeOff size={20} /> : <Eye size={20} />}</button>
               </div>
             </Field>
-            <button className={`btn ${badgeOn ? '' : 'primary'} lg block`} disabled={!!busy}><LogIn size={20} />{busy === 'password' ? 'Signing in…' : 'Sign in'}</button>
-            <p className="small muted center" style={{ margin: 0 }}>Forgot your password? Ask an admin to reset it.</p>
+            <button className={`btn ${badgeOn ? '' : 'primary'} lg block`} disabled={!!busy}><LogIn size={20} />{busy === 'password' ? t('Signing in…') : t('Sign in')}</button>
+            <p className="small muted center" style={{ margin: 0 }}>{t('Forgot your password? Ask an admin to reset it.')}</p>
           </form>
 
           {err && <div className="banner danger" role="alert">{err}</div>}
-          {welcome && <div className="banner ok"><CheckCircle2 />Welcome!</div>}
+          {welcome && <div className="banner ok"><CheckCircle2 />{t('Welcome!')}</div>}
         </div>
       </div>
     </div>

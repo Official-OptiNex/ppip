@@ -4,7 +4,8 @@ import { Plus, Pencil, Trash2, Save, HardHat, Phone } from 'lucide-react';
 import type { Mechanic } from '../../../shared/types';
 import { deleteDoc, newId, saveDoc, toast, toastError, useStore } from '../lib/store';
 import { uniqueSorted } from '../lib/util';
-import { Empty, Field, Modal, TagInput, confirmDialog } from '../components/ui';
+import { Empty, Field, Modal, TagInput, confirmDialog, rich } from '../components/ui';
+import { t } from '../lib/i18n';
 
 export function useShifts() {
   const shifts = useStore((s) => s.settings.shifts);
@@ -26,37 +27,37 @@ export function MechanicsTab() {
   const perShift = (sh: string) => Object.values(mechanics).filter((m) => !m.inactive && m.shift === sh).length;
 
   const remove = async (m: Mechanic) => {
-    if (!(await confirmDialog({ title: `Delete ${m.name}?`, body: `${pmCount(m.name)} PM entries keep their name. To keep them in the list for history, mark them “No longer here” instead.`, confirm: 'Delete', danger: true }))) return;
-    try { await deleteDoc('mechanics', m.id); toast('Mechanic deleted'); } catch (e) { toastError(e); }
+    if (!(await confirmDialog({ title: t('Delete {name}?', { name: m.name }), body: t('{n} PM entries keep their name. To keep them in the list for history, mark them “No longer here” instead.', { n: pmCount(m.name) }), confirm: t('Delete'), danger: true }))) return;
+    try { await deleteDoc('mechanics', m.id); toast(t('Mechanic deleted')); } catch (e) { toastError(e); }
   };
 
   return (
     <div className="stack">
       <div className="row wrap" style={{ justifyContent: 'space-between' }}>
-        <p className="muted" style={{ margin: 0, maxWidth: 640 }}>Everyone who does PMs. They appear in the <b>“Who did it”</b> list when logging a PM, with their shift.</p>
-        <button className="btn primary lg" onClick={() => setEdit({ shift: shifts[0] })}><Plus />Add mechanic</button>
+        <p className="muted" style={{ margin: 0, maxWidth: 640 }}>{rich('Everyone who does PMs. They appear in the **“Who did it”** list when logging a PM, with their shift.')}</p>
+        <button className="btn primary lg" onClick={() => setEdit({ shift: shifts[0] })}><Plus />{t('Add mechanic')}</button>
       </div>
 
       <div className="chips">
-        <button className={`filter-chip ${!shiftFilter ? 'on' : ''}`} onClick={() => setShiftFilter('')}>All shifts<span className="n">{Object.values(mechanics).filter((m) => !m.inactive).length}</span></button>
-        {shifts.map((sh) => <button key={sh} className={`filter-chip ${shiftFilter === sh ? 'on' : ''}`} onClick={() => setShiftFilter(sh)}>{sh}<span className="n">{perShift(sh)}</span></button>)}
-        <button className="btn sm ghost" onClick={() => setEditShifts(true)}><Pencil size={15} />Edit shift names</button>
+        <button className={`filter-chip ${!shiftFilter ? 'on' : ''}`} onClick={() => setShiftFilter('')}>{t('All shifts')}<span className="n">{Object.values(mechanics).filter((m) => !m.inactive).length}</span></button>
+        {shifts.map((sh) => <button key={sh} className={`filter-chip ${shiftFilter === sh ? 'on' : ''}`} onClick={() => setShiftFilter(sh)}>{t(sh)}<span className="n">{perShift(sh)}</span></button>)}
+        <button className="btn sm ghost" onClick={() => setEditShifts(true)}><Pencil size={15} />{t('Edit shift names')}</button>
       </div>
 
-      {list.length === 0 ? <div className="card"><Empty icon={<HardHat size={48} />} title={Object.keys(mechanics).length ? 'Nobody on this shift' : 'No mechanics yet'}>Add the people who do PMs.</Empty></div> : (
+      {list.length === 0 ? <div className="card"><Empty icon={<HardHat size={48} />} title={Object.keys(mechanics).length ? 'Nobody on this shift' : 'No mechanics yet'}>{t('Add the people who do PMs.')}</Empty></div> : (
         <div className="table-wrap">
           <table className="tbl">
-            <thead><tr><th>Name</th><th>Shift</th><th>Phone</th><th className="num">PMs done</th><th /></tr></thead>
+            <thead><tr><th>{t('Name')}</th><th>{t('Shift')}</th><th>{t('Phone')}</th><th className="num">{t('PMs done')}</th><th /></tr></thead>
             <tbody>
               {list.map((m) => (
                 <tr key={m.id} className={m.inactive ? 'st-retired' : ''}>
-                  <td><b>{m.name}</b>{m.inactive && <span className="pill neutral" style={{ marginLeft: 8 }}>No longer here</span>}{m.notes && <div className="small muted">{m.notes}</div>}</td>
-                  <td>{m.shift || <span className="muted">—</span>}</td>
+                  <td><b>{m.name}</b>{m.inactive && <span className="pill neutral" style={{ marginLeft: 8 }}>{t('No longer here')}</span>}{m.notes && <div className="small muted">{m.notes}</div>}</td>
+                  <td>{m.shift ? t(m.shift) : <span className="muted">—</span>}</td>
                   <td>{m.phone ? <a href={`tel:${m.phone}`}><Phone size={14} /> {m.phone}</a> : <span className="muted">—</span>}</td>
                   <td className="num">{pmCount(m.name)}</td>
                   <td><div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
-                    <button className="btn sm" onClick={() => setEdit(m)}><Pencil size={16} />Edit</button>
-                    <button className="btn sm icon ghost" onClick={() => remove(m)} aria-label={`Delete ${m.name}`}><Trash2 size={17} /></button>
+                    <button className="btn sm" onClick={() => setEdit(m)}><Pencil size={16} />{t('Edit')}</button>
+                    <button className="btn sm icon ghost" onClick={() => remove(m)} aria-label={`${t('Delete')} ${m.name}`}><Trash2 size={17} /></button>
                   </div></td>
                 </tr>
               ))}
@@ -77,25 +78,25 @@ function MechanicForm({ item, onClose }: { item: Partial<Mechanic>; onClose: () 
   const all = useStore((s) => s.docs.mechanics);
   const dup = d.name && Object.values(all).some((m) => m.id !== d.id && m.name.toLowerCase() === d.name!.trim().toLowerCase());
   const save = async () => {
-    if (!d.name?.trim()) { toast('Enter a name', 'danger'); return; }
-    if (dup) { toast('That name is already on the list', 'danger'); return; }
+    if (!d.name?.trim()) { toast(t('Enter a name'), 'danger'); return; }
+    if (dup) { toast(t('That name is already on the list'), 'danger'); return; }
     setBusy(true);
-    try { await saveDoc('mechanics', d.id || newId(), { ...d, name: d.name.trim() }); toast(d.id ? 'Saved' : `Added ${d.name}`); onClose(); } catch (e) { toastError(e); } finally { setBusy(false); }
+    try { await saveDoc('mechanics', d.id || newId(), { ...d, name: d.name.trim() }); toast(d.id ? t('Saved') : t('Added “{name}”', { name: d.name })); onClose(); } catch (e) { toastError(e); } finally { setBusy(false); }
   };
   return (
-    <Modal title={d.id ? `Edit ${item.name}` : 'Add mechanic'} icon={<HardHat color="var(--primary)" />} onClose={onClose}
-      footer={<><button className="btn lg" onClick={onClose}>Cancel</button><button className="btn primary lg" onClick={save} disabled={busy}><Save />Save</button></>}>
+    <Modal title={d.id ? t('Edit {tag}', { tag: item.name }) : t('Add mechanic')} icon={<HardHat color="var(--primary)" />} onClose={onClose}
+      footer={<><button className="btn lg" onClick={onClose}>{t('Cancel')}</button><button className="btn primary lg" onClick={save} disabled={busy}><Save />{t('Save')}</button></>}>
       <form className="stack" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <Field label="Name" required hint="Shown in the “Who did it” list on PMs"><input className="input" value={d.name || ''} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus /></Field>
-        {dup && <div className="banner warn">Someone with this name is already on the list.</div>}
+        {dup && <div className="banner warn">{t('Someone with this name is already on the list.')}</div>}
         <Field label="Shift">
           <div className="seg" style={{ display: 'flex', flexWrap: 'wrap' }}>
-            {shifts.map((sh) => <button type="button" key={sh} className={d.shift === sh ? 'on' : ''} onClick={() => setD({ ...d, shift: sh })}>{sh}</button>)}
+            {shifts.map((sh) => <button type="button" key={sh} className={d.shift === sh ? 'on' : ''} onClick={() => setD({ ...d, shift: sh })}>{t(sh)}</button>)}
           </div>
         </Field>
         <Field label="Phone (optional)"><input className="input" value={d.phone || ''} onChange={(e) => setD({ ...d, phone: e.target.value })} inputMode="tel" /></Field>
-        <Field label="Notes (optional)"><input className="input" value={d.notes || ''} onChange={(e) => setD({ ...d, notes: e.target.value })} placeholder="e.g. lead mechanic, electrical" /></Field>
-        {d.id && <label className="check"><input type="checkbox" checked={!!d.inactive} onChange={(e) => setD({ ...d, inactive: e.target.checked })} />No longer here (hide from the list, keep their PM history)</label>}
+        <Field label="Notes (optional)"><input className="input" value={d.notes || ''} onChange={(e) => setD({ ...d, notes: e.target.value })} placeholder={t('e.g. lead mechanic, electrical')} /></Field>
+        {d.id && <label className="check"><input type="checkbox" checked={!!d.inactive} onChange={(e) => setD({ ...d, inactive: e.target.checked })} />{t('No longer here (hide from the list, keep their PM history)')}</label>}
       </form>
     </Modal>
   );
@@ -108,16 +109,16 @@ function ShiftNames({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const inUse = uniqueSorted(Object.values(mechanics).map((m) => m.shift)).filter((s) => !list.includes(s));
   const save = async () => {
-    if (!list.length) { toast('Keep at least one shift', 'danger'); return; }
+    if (!list.length) { toast(t('Keep at least one shift'), 'danger'); return; }
     setBusy(true);
-    try { await saveDoc('settings', 'app', { shifts: list }); toast('Shift names saved'); onClose(); } catch (e) { toastError(e); } finally { setBusy(false); }
+    try { await saveDoc('settings', 'app', { shifts: list }); toast(t('Shift names saved')); onClose(); } catch (e) { toastError(e); } finally { setBusy(false); }
   };
   return (
-    <Modal title="Shift names" onClose={onClose} footer={<><button className="btn lg" onClick={onClose}>Cancel</button><button className="btn primary lg" onClick={save} disabled={busy}><Save />Save</button></>}>
+    <Modal title="Shift names" onClose={onClose} footer={<><button className="btn lg" onClick={onClose}>{t('Cancel')}</button><button className="btn primary lg" onClick={save} disabled={busy}><Save />{t('Save')}</button></>}>
       <div className="stack">
-        <p className="muted" style={{ margin: 0 }}>Type a shift name and press Enter to add it. Click × to remove one.</p>
-        <TagInput values={list} onChange={setList} options={[]} placeholder="e.g. A shift, B shift, Days, Nights…" />
-        {inUse.length > 0 && <div className="banner warn">Still assigned to someone: {inUse.join(', ')}. Change those mechanics' shift too.</div>}
+        <p className="muted" style={{ margin: 0 }}>{t('Type a shift name and press Enter to add it. Click × to remove one.')}</p>
+        <TagInput values={list} onChange={setList} options={[]} placeholder={t('e.g. A shift, B shift, Days, Nights…')} />
+        {inUse.length > 0 && <div className="banner warn">{t("Still assigned to someone: {list}. Change those mechanics' shift too.", { list: inUse.join(', ') })}</div>}
       </div>
     </Modal>
   );

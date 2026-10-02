@@ -140,6 +140,8 @@ export class Store extends DurableObject<Env> {
     // v3: badge numbers for one-scan sign-in
     const userCols = this.sql.exec(`PRAGMA table_info(users)`).toArray().map((r) => r.name);
     if (!userCols.includes('badge')) this.sql.exec(`ALTER TABLE users ADD COLUMN badge TEXT`);
+    // v4: profile pictures (image id)
+    if (!userCols.includes('avatar')) this.sql.exec(`ALTER TABLE users ADD COLUMN avatar TEXT`);
     this.sql.exec(`DROP INDEX IF EXISTS users_badge`);
     this.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_badge_ci ON users(lower(badge)) WHERE badge IS NOT NULL`);
     const seeded = this.sql.exec(`SELECT value FROM meta WHERE key='seeded'`).toArray()[0];
@@ -178,9 +180,16 @@ export class Store extends DurableObject<Env> {
   settings() { return { ...DEFAULT_SETTINGS, ...(this.getDoc('settings', 'app') || {}) }; }
 
   publicUser(r: Row, full = false): PublicUser {
-    const u: PublicUser = { id: r.id as string, name: r.name as string, email: r.email as string, role: r.role as Role, active: !!r.active };
+    const u: PublicUser = { id: r.id as string, name: r.name as string, email: r.email as string, role: r.role as Role, active: !!r.active, avatar: (r.avatar as string) || null };
     if (full) { u.lastLogin = (r.last_login as number) ?? null; u.createdAt = r.created_at as number; u.badge = (r.badge as string) || null; }
     return u;
+  }
+  /** An uploaded image id, or null. Refuses ids that don't exist. */
+  checkImage(id?: string | null) {
+    if (!id) return null;
+    const s = String(id);
+    if (!this.sql.exec(`SELECT id FROM images WHERE id=?`, s).toArray().length) throw new HttpError(400, 'That photo was not found. Please upload it again.');
+    return s;
   }
   users(full = false) { return this.sql.exec(`SELECT * FROM users ORDER BY name COLLATE NOCASE`).toArray().map((r) => this.publicUser(r, full)); }
 
@@ -405,6 +414,14 @@ export class Store extends DurableObject<Env> {
       this.log(u, 'update', 'users', u.id, badge ? `${u.name} linked a badge` : `${u.name} removed their badge`);
       return json({ badge });
     }
+    if (p === '/me/avatar' && m === 'PUT') {
+      const u = this.need(c, 'viewer');
+      const b = await this.body<{ image?: string | null }>(req);
+      const avatar = this.checkImage(b.image);
+      this.sql.exec(`UPDATE users SET avatar=? WHERE id=?`, avatar, u.id);
+      this.broadcast({ t: 'users', users: this.users(false) });
+      return json({ avatar });
+    }
     if (p === '/me/password' && m === 'POST') {
       const u = this.need(c, 'viewer');
       const b = await this.body<{ current: string; next: string }>(req);
@@ -447,9 +464,10 @@ export class Store extends DurableObject<Env> {
     if (p === '/export' && m === 'GET') { this.need(c, 'viewer'); return json(await this.snapshot(false)); }
 
     // ---- images
-    if (p === '/images' && m === 'POST') { const u = this.need(c, 'editor'); return json(await this.saveImage(req, u.id)); }
+    // anyone signed in may upload a photo (viewers need it for their own profile picture)
+    if (p === '/images' && m === 'POST') { const u = this.need(c, 'viewer'); return json(await this.saveImage(req, u.id)); }
     if (p === '/uploads' && m === 'POST') {
-      const u = this.need(c, 'editor');
+      const u = this.need(c, 'viewer');
       const b = await this.body<{ label?: string }>(req);
       const code = randomCode(8);
       const now = Date.now();
@@ -519,11 +537,11 @@ export class Store extends DurableObject<Env> {
 
   bootstrap(c: Ctx) {
     const u = this.need(c, 'viewer');
-    const row = this.sql.exec(`SELECT prefs, notif_seen, badge FROM users WHERE id=?`, u.id).one();
+    const row = this.sql.exec(`SELECT prefs, notif_seen, badge, avatar FROM users WHERE id=?`, u.id).one();
     const docs: Record<string, unknown[]> = {};
     for (const k of DOC_KINDS) if (k !== 'settings') docs[k] = this.allDocs(k);
     return json({
-      me: { ...u, badge: (row.badge as string) || null, prefs: JSON.parse((row.prefs as string) || '{}') },
+      me: { ...u, badge: (row.badge as string) || null, avatar: (row.avatar as string) || null, prefs: JSON.parse((row.prefs as string) || '{}') },
       notifSeen: row.notif_seen || 0,
       users: this.users(u.role === 'admin'),
       settings: this.settings(),
@@ -988,7 +1006,7 @@ export class Store extends DurableObject<Env> {
     return {
       app: 'ppip', version: 1, exportedAt: Date.now(),
       users: includeSecrets
-        ? this.sql.exec(`SELECT id,email,name,role,pw,active,prefs,created_at,last_login,badge FROM users`).toArray()
+        ? this.sql.exec(`SELECT id,email,name,role,pw,active,prefs,created_at,last_login,badge,avatar FROM users`).toArray()
         : this.users(false),
       docs,
       movements: this.sql.exec(`SELECT * FROM movements ORDER BY at`).toArray(),
@@ -1043,8 +1061,8 @@ export class Store extends DurableObject<Env> {
       for (const r of (snap.meta as Row[]) || []) this.sql.exec(`INSERT OR REPLACE INTO meta (key,value) VALUES (?,?)`, r.key, r.value);
       if (hasSecrets) {
         this.sql.exec(`DELETE FROM users`);
-        for (const r of users) this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at,last_login,badge) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          r.id, r.email, r.name, r.role, r.pw, r.active ?? 1, r.prefs ?? '{}', r.created_at ?? Date.now(), r.last_login ?? null, (r.badge as string) || null);
+        for (const r of users) this.sql.exec(`INSERT INTO users (id,email,name,role,pw,active,prefs,created_at,last_login,badge,avatar) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          r.id, r.email, r.name, r.role, r.pw, r.active ?? 1, r.prefs ?? '{}', r.created_at ?? Date.now(), r.last_login ?? null, (r.badge as string) || null, (r.avatar as string) || null);
         // never lock the restoring admin out
         if (!this.sql.exec(`SELECT id FROM users WHERE id=? AND role='admin' AND active=1`, u.id).toArray().length) {
           const me = this.sql.exec(`SELECT id FROM users WHERE lower(email)=lower(?)`, u.email).toArray()[0];
@@ -1086,7 +1104,7 @@ export class Store extends DurableObject<Env> {
       return json(this.users(true).find((x) => x.id === newId));
     }
     if (a === 'users' && id && m === 'PATCH') {
-      const b = await this.body<{ name?: string; email?: string; role?: Role; password?: string; active?: boolean; badge?: string | null }>(req);
+      const b = await this.body<{ name?: string; email?: string; role?: Role; password?: string; active?: boolean; badge?: string | null; avatar?: string | null }>(req);
       const cur = this.sql.exec(`SELECT * FROM users WHERE id=?`, id).toArray()[0];
       if (!cur) throw new HttpError(404, 'User not found.');
       const name = b.name != null ? String(b.name).trim() : (cur.name as string);
@@ -1097,6 +1115,7 @@ export class Store extends DurableObject<Env> {
       this.assertUnique(name, email, id);
       if (cur.role === 'admin' && (role !== 'admin' || !active)) this.assertAnotherAdmin(id);
       if (b.badge !== undefined) this.setBadge(id, b.badge);
+      if (b.avatar !== undefined) this.sql.exec(`UPDATE users SET avatar=? WHERE id=?`, this.checkImage(b.avatar), id);
       this.sql.exec(`UPDATE users SET name=?, email=?, role=?, active=? WHERE id=?`, name, email, role, active ? 1 : 0, id);
       if (b.password) {
         if (b.password.length < 6) throw new HttpError(400, 'Password must be at least 6 characters.');
@@ -1195,7 +1214,9 @@ export class Store extends DurableObject<Env> {
       const now = Date.now();
       this.ctx.storage.transactionSync(() => {
         this.sql.exec(`DELETE FROM docs WHERE kind<>'settings'`);
-        for (const t of ['movements', 'activity', 'notifications', 'images', 'uploads']) this.sql.exec(`DELETE FROM ${t}`);
+        for (const t of ['movements', 'activity', 'notifications', 'uploads']) this.sql.exec(`DELETE FROM ${t}`);
+        // accounts are kept, so keep their profile pictures too
+        this.sql.exec(`DELETE FROM images WHERE id NOT IN (SELECT avatar FROM users WHERE avatar IS NOT NULL)`);
         this.sql.exec(`INSERT OR REPLACE INTO meta (key,value) VALUES ('orderSeq','0')`);
         for (const mf of SEED_MANUFACTURERS) this.putDoc('manufacturers', { id: uid(), ...mf, createdAt: now, updatedAt: now });
         for (const v of SEED_VENDORS) this.putDoc('vendors', { id: uid(), ...v, createdAt: now, updatedAt: now });

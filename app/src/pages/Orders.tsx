@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { applyUpsert, deleteDoc, getState, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { fmtDate, money, navigate, stockStatus, todayISO, matches, reorderQty, timeAgo, setQuery } from '../lib/util';
 import { Logo } from '../components/Logo';
+import { getLang, plural, t } from '../lib/i18n';
 import { Combobox, Empty, Field, SearchInput, confirmDialog, NumberInput, Spinner } from '../components/ui';
 
 export const ORDER_STATUS: Record<OrderStatus, { label: string; cls: string }> = {
@@ -34,40 +35,40 @@ function OrderList({ query }: { query: URLSearchParams }) {
   return (
     <div>
       <div className="page-head">
-        <div><h1>Order Guides</h1><div className="sub">Type up parts requests instead of writing them by hand — then print in your standard format.</div></div>
+        <div><h1>{t('Order Guides')}</h1><div className="sub">{t('Type up parts requests instead of writing them by hand — then print in your standard format.')}</div></div>
         <div className="btn-group">
-          <a className="btn" href="#/print/order/blank"><Printer size={19} />Blank form</a>
-          {canEdit && <a className="btn" href="#/orders/new?from=low"><ShoppingCart size={19} />From low stock</a>}
-          {canEdit && <a className="btn primary lg" data-tour="new-order" href="#/orders/new"><Plus />New order guide</a>}
+          <a className="btn" href="#/print/order/blank"><Printer size={19} />{t('Blank form')}</a>
+          {canEdit && <a className="btn" href="#/orders/new?from=low"><ShoppingCart size={19} />{t('From low stock')}</a>}
+          {canEdit && <a className="btn primary lg" data-tour="new-order" href="#/orders/new"><Plus />{t('New order guide')}</a>}
         </div>
       </div>
       <div className="row wrap" style={{ marginBottom: '1rem' }}>
         <SearchInput value={q} onChange={setQ} placeholder="Search orders, parts, people…" />
         <div className="chips">
           {['open', 'draft', 'submitted', 'ordered', 'received', 'all'].map((s) => (
-            <button key={s} className={`filter-chip ${status === s ? 'on' : ''}`} onClick={() => setQuery({ status: s === 'open' ? null : s })}>{s === 'open' ? 'Open' : s === 'all' ? 'All' : ORDER_STATUS[s as OrderStatus].label}</button>
+            <button key={s} className={`filter-chip ${status === s ? 'on' : ''}`} onClick={() => setQuery({ status: s === 'open' ? null : s })}>{t(s === 'open' ? 'Open' : s === 'all' ? 'All' : ORDER_STATUS[s as OrderStatus].label)}</button>
           ))}
         </div>
       </div>
-      {list.length === 0 ? <div className="card"><Empty icon={<ClipboardList size={48} />} title="No order guides here">{canEdit && <a className="btn primary" href="#/orders/new"><Plus />Create one</a>}</Empty></div> : (
+      {list.length === 0 ? <div className="card"><Empty icon={<ClipboardList size={48} />} title="No order guides here">{canEdit && <a className="btn primary" href="#/orders/new"><Plus />{t('Create one')}</a>}</Empty></div> : (
         <div className="table-wrap">
           <table className="tbl">
-            <thead><tr><th>Order</th><th>Requested by</th><th>Needed by</th><th>Priority</th><th>Status</th><th className="num">Items</th><th className="num">Total</th><th /></tr></thead>
+            <thead><tr><th>{t('Order #')}</th><th>{t('Requested by')}</th><th>{t('Needed by')}</th><th>{t('Priority')}</th><th>{t('Status')}</th><th className="num">{t('Items')}</th><th className="num">{t('Total')}</th><th /></tr></thead>
             <tbody>
               {list.map((o) => (
                 <tr key={o.id} className="clickable" onClick={() => navigate(`/orders/${o.id}`)}>
                   <td><b className="mono">{o.number}</b><div className="small muted">{o.title}{o.machine ? ` · ${o.machine}` : ''}</div></td>
                   <td>{o.requestedBy || '—'}<div className="small muted">{timeAgo(o.createdAt)}</div></td>
                   <td>{fmtDate(o.dateNeeded)}</td>
-                  <td>{o.priority && <span className={`pill ${PRIORITY[o.priority]?.cls}`}>{PRIORITY[o.priority]?.label}</span>}</td>
-                  <td><span className={`pill ${ORDER_STATUS[o.status]?.cls}`}>{ORDER_STATUS[o.status]?.label}</span></td>
+                  <td>{o.priority && <span className={`pill ${PRIORITY[o.priority]?.cls}`}>{t(o.priority === 'low' ? 'Low priority' : PRIORITY[o.priority]?.label || '')}</span>}</td>
+                  <td><span className={`pill ${ORDER_STATUS[o.status]?.cls}`}>{t(ORDER_STATUS[o.status]?.label || '')}</span></td>
                   <td className="num">{o.items.length}</td>
                   <td className="num">{orderTotal(o) ? money(orderTotal(o)) : '—'}</td>
                   <td onClick={(e) => e.stopPropagation()}><div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                    <a className="btn sm" href={`#/print/order/${o.id}`}><Printer size={16} />Print</a>
-                    {canEdit && <button className="btn sm icon ghost" aria-label="Delete order guide" title="Delete permanently" onClick={async () => {
-                      if (!(await confirmDialog({ title: `Permanently delete ${o.number}?`, body: `“${o.title}” with ${o.items.length} line${o.items.length === 1 ? '' : 's'} will be removed for good.`, confirm: 'Delete permanently', danger: true }))) return;
-                      try { await deleteDoc('orders', o.id); toast('Order guide deleted'); } catch (err) { toastError(err); }
+                    <a className="btn sm" href={`#/print/order/${o.id}`}><Printer size={16} />{t('Print')}</a>
+                    {canEdit && <button className="btn sm icon ghost" aria-label="Delete order guide" title={t('Delete permanently')} onClick={async () => {
+                      if (!(await confirmDialog({ title: t('Permanently delete {what}?', { what: o.number }), body: `“${o.title}” · ${plural(o.items.length, '{n} line', '{n} lines')} · ${t('It will be removed for good.')}`, confirm: t('Delete permanently'), danger: true }))) return;
+                      try { await deleteDoc('orders', o.id); toast(t('Order guide deleted')); } catch (err) { toastError(err); }
                     }}><Trash2 size={17} /></button>}
                   </div></td>
                 </tr>
@@ -86,7 +87,7 @@ function itemFromPart(p: Part): OrderItem {
   const st = stockStatus(p);
   return {
     partId: p.id, name: p.name, partNumber: p.vendorPartNumber || p.partNumber, manufacturer: p.manufacturer, vendor: p.vendor, qty: reorderQty(p),
-    unit: p.unit, unitCost: p.unitCost, url: p.orderUrl, reason: st === 'out' ? `Out of stock (${p.qty} left)` : st === 'order' ? `Order now (${p.qty} left)` : st === 'low' ? `Running low (${p.qty} left)` : '',
+    unit: p.unit, unitCost: p.unitCost, url: p.orderUrl, reason: st === 'out' ? t('Out of stock ({n} left)', { n: p.qty }) : st === 'order' ? t('Order now ({n} left)', { n: p.qty }) : st === 'low' ? t('Running low ({n} left)', { n: p.qty }) : '',
   };
 }
 
@@ -114,7 +115,7 @@ function OrderEditor({ id, query }: { id: string; query: URLSearchParams }) {
           .sort((a, b) => (a.vendor || '').localeCompare(b.vendor || '') || a.name.localeCompare(b.name));
         if (need.length) items = need.map(itemFromPart);
       }
-      setD({ id: newId_, title: query.get('from') === 'low' ? 'Restock low / out-of-stock parts' : 'Parts order', status: 'draft', priority: 'normal', requestedBy: me?.name, department: settings.department, dateNeeded: todayISO(7), items });
+      setD({ id: newId_, title: query.get('from') === 'low' ? t('Restock low / out-of-stock parts') : t('Parts order'), status: 'draft', priority: 'normal', requestedBy: me?.name, department: settings.department, dateNeeded: todayISO(7), items });
       setDirty(query.get('from') === 'low');
     } else if (existing) {
       setD(JSON.parse(JSON.stringify(existing)));
@@ -128,7 +129,7 @@ function OrderEditor({ id, query }: { id: string; query: URLSearchParams }) {
   const partNames = useMemo(() => Object.values(parts).filter((p) => !p.decommissioned).map((p) => p.name).sort(), [parts]);
   const byName = useMemo(() => new Map(Object.values(parts).map((p) => [p.name, p])), [parts]);
 
-  if (!d) return loaded && !isNew && !existing ? <Empty title="Order guide not found"><a href="#/orders">Back to order guides</a></Empty> : <Spinner />;
+  if (!d) return loaded && !isNew && !existing ? <Empty title="Order guide not found"><a href="#/orders">{t('Back to order guides')}</a></Empty> : <Spinner />;
 
   const set = <K extends keyof OrderGuide>(k: K, v: OrderGuide[K]) => { setD({ ...d, [k]: v }); setDirty(true); };
   const setItem = (i: number, patch: Partial<OrderItem>) => { const items = d.items.slice(); items[i] = { ...items[i], ...patch }; set('items', items); };
@@ -142,24 +143,24 @@ function OrderEditor({ id, query }: { id: string; query: URLSearchParams }) {
       const saved = await saveDoc('orders', d.id, { ...d, items }, `Save order ${d.title}`);
       if (saved) setD(JSON.parse(JSON.stringify(saved)));
       setDirty(false);
-      toast(isNew ? 'Order guide created' : 'Saved');
+      toast(isNew ? t('Order guide created') : t('Saved'));
       if (then === 'print') navigate(`/print/order/${d.id}`);
       else if (isNew) navigate(`/orders/${d.id}`, true);
     } catch (e) { toastError(e); } finally { setSaving(false); }
   };
   const receive = async () => {
     if (dirty) await save();
-    if (!(await confirmDialog({ title: 'Receive this order into stock?', body: 'Every line linked to an inventory part will be added to stock (quantities as listed). Free-typed lines are just marked received.', confirm: 'Receive into stock' }))) return;
-    try { const o = await api<OrderGuide>(`/orders/${d.id}/receive`, { body: {} }); applyUpsert('orders', o); setD(o); toast('Received into stock'); } catch (e) { toastError(e); }
+    if (!(await confirmDialog({ title: t('Receive this order into stock?'), body: t('Every line linked to an inventory part will be added to stock (quantities as listed). Free-typed lines are just marked received.'), confirm: t('Receive into stock') }))) return;
+    try { const o = await api<OrderGuide>(`/orders/${d.id}/receive`, { body: {} }); applyUpsert('orders', o); setD(o); toast(t('Received into stock')); } catch (e) { toastError(e); }
   };
   const remove = async () => {
-    if (!(await confirmDialog({ title: `Permanently delete ${d.number || 'this order guide'}?`, body: 'It will be removed for good.', confirm: 'Delete permanently', danger: true }))) return;
+    if (!(await confirmDialog({ title: t('Permanently delete {what}?', { what: d.number || t('this order guide') }), body: t('It will be removed for good.'), confirm: t('Delete permanently'), danger: true }))) return;
     try { if (!isNew) await deleteDoc('orders', d.id); navigate('/orders'); } catch (e) { toastError(e); }
   };
   const duplicate = () => {
     const id2 = newId();
     saveDoc('orders', id2, { ...d, id: id2, number: undefined, status: 'draft', poNumber: '', items: d.items.map((i) => ({ ...i, received: false })), requestedBy: me?.name } as Partial<OrderGuide>)
-      .then(() => { toast('Copied to a new draft'); navigate(`/orders/${id2}`); }).catch(toastError);
+      .then(() => { toast(t('Copied to a new draft')); navigate(`/orders/${id2}`); }).catch(toastError);
   };
 
   const total = orderTotal(d);
@@ -167,17 +168,17 @@ function OrderEditor({ id, query }: { id: string; query: URLSearchParams }) {
     <div>
       <div className="page-head">
         <div className="row">
-          <a className="btn icon ghost" href="#/orders" aria-label="Back"><ArrowLeft /></a>
+          <a className="btn icon ghost" href="#/orders" aria-label={t('Back')}><ArrowLeft /></a>
           <div>
-            <h1>{d.number || 'New order guide'}</h1>
-            <div className="sub">{dirty ? <span style={{ color: 'var(--warn)', fontWeight: 700 }}>Unsaved changes</span> : d.updatedAt ? `Saved · ${timeAgo(d.updatedAt)} by ${d.updatedBy}` : 'Not saved yet'}</div>
+            <h1>{d.number || t('New order guide')}</h1>
+            <div className="sub">{dirty ? <span style={{ color: 'var(--warn)', fontWeight: 700 }}>{t('Unsaved changes')}</span> : d.updatedAt ? `${t('Saved')} · ${timeAgo(d.updatedAt)} · ${d.updatedBy}` : t('Not saved yet')}</div>
           </div>
         </div>
         <div className="btn-group">
-          {!isNew && canEdit && <button className="btn" onClick={duplicate}><Copy size={18} />Duplicate</button>}
-          {!isNew && canEdit && ['ordered', 'approved', 'submitted'].includes(d.status) && <button className="btn ok" onClick={receive}><PackageCheck size={19} />Receive into stock</button>}
-          <button className="btn lg" onClick={() => (dirty && canEdit ? save('print') : navigate(`/print/order/${d.id}`))} disabled={isNew && !canEdit}><Printer />{dirty && canEdit ? 'Save & print' : 'Print'}</button>
-          {canEdit && <button className="btn primary lg" onClick={() => save()} disabled={saving || (!dirty && !isNew)}><Save />{saving ? 'Saving…' : 'Save'}</button>}
+          {!isNew && canEdit && <button className="btn" onClick={duplicate}><Copy size={18} />{t('Duplicate')}</button>}
+          {!isNew && canEdit && ['ordered', 'approved', 'submitted'].includes(d.status) && <button className="btn ok" onClick={receive}><PackageCheck size={19} />{t('Receive into stock')}</button>}
+          <button className="btn lg" onClick={() => (dirty && canEdit ? save('print') : navigate(`/print/order/${d.id}`))} disabled={isNew && !canEdit}><Printer />{dirty && canEdit ? t('Save & print') : t('Print')}</button>
+          {canEdit && <button className="btn primary lg" onClick={() => save()} disabled={saving || (!dirty && !isNew)}><Save />{saving ? t('Saving…') : t('Save')}</button>}
         </div>
       </div>
 
@@ -188,49 +189,49 @@ function OrderEditor({ id, query }: { id: string; query: URLSearchParams }) {
             <Field label="Requested by"><input className="input" value={d.requestedBy || ''} onChange={(e) => set('requestedBy', e.target.value)} /></Field>
             <Field label="Department"><input className="input" value={d.department || ''} onChange={(e) => set('department', e.target.value)} /></Field>
             <Field label="Needed by"><input className="input" type="date" value={d.dateNeeded || ''} onChange={(e) => set('dateNeeded', e.target.value)} /></Field>
-            <Field label="Machine / line"><Combobox value={d.machine || ''} onChange={(v) => set('machine', v)} options={Object.values(machines).map((m) => m.name).sort()} placeholder="Optional" /></Field>
+            <Field label="Machine / line"><Combobox value={d.machine || ''} onChange={(v) => set('machine', v)} options={Object.values(machines).map((m) => m.name).sort()} placeholder={t('Optional')} /></Field>
             <Field label="Priority">
               <select className="input" value={d.priority || 'normal'} onChange={(e) => set('priority', e.target.value as OrderGuide['priority'])}>
-                {Object.entries(PRIORITY).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                {Object.entries(PRIORITY).map(([k, v]) => <option key={k} value={k}>{t(k === 'low' ? 'Low priority' : v.label)}</option>)}
               </select>
             </Field>
             <Field label="Status">
               <select className="input" value={d.status} onChange={(e) => set('status', e.target.value as OrderStatus)}>
-                {Object.entries(ORDER_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                {Object.entries(ORDER_STATUS).map(([k, v]) => <option key={k} value={k}>{t(v.label)}</option>)}
               </select>
             </Field>
-            <Field label="Supplier (if one)"><Combobox value={d.vendor || ''} onChange={(v) => set('vendor', v)} options={Object.values(vendors).map((v) => v.name).sort()} placeholder="Optional" /></Field>
-            <Field label="PO number"><input className="input mono" value={d.poNumber || ''} onChange={(e) => set('poNumber', e.target.value)} placeholder="Optional" /></Field>
+            <Field label="Supplier (if one)"><Combobox value={d.vendor || ''} onChange={(v) => set('vendor', v)} options={Object.values(vendors).map((v) => v.name).sort()} placeholder={t('Optional')} /></Field>
+            <Field label="PO number"><input className="input mono" value={d.poNumber || ''} onChange={(e) => set('poNumber', e.target.value)} placeholder={t('Optional')} /></Field>
           </div>
         </div>
 
         <div className="row" style={{ justifyContent: 'space-between', margin: '1.4rem 0 0.6rem' }}>
-          <h2>Items ({d.items.filter((i) => i.name).length})</h2>
-          <span className="muted">Tip: start typing a part name to fill in the details from inventory.</span>
+          <h2>{t('Items')} ({d.items.filter((i) => i.name).length})</h2>
+          <span className="muted">{t('Tip: start typing a part name to fill in the details from inventory.')}</span>
         </div>
         <div className="table-wrap">
           <table className="tbl">
-            <thead><tr><th style={{ width: 40 }}>#</th><th style={{ minWidth: 260 }}>Part / description</th><th style={{ minWidth: 130 }}>Part #</th><th style={{ minWidth: 140 }}>Manufacturer</th><th style={{ width: 110 }}>Qty</th><th style={{ width: 90 }}>Unit</th><th style={{ width: 120 }}>Unit cost</th><th style={{ minWidth: 200 }}>Why / reason</th><th /></tr></thead>
+            <thead><tr><th style={{ width: 40 }}>#</th><th style={{ minWidth: 260 }}>{t('Part / description')}</th><th style={{ minWidth: 130 }}>{t('Part #')}</th><th style={{ minWidth: 140 }}>{t('Manufacturer')}</th><th style={{ width: 110 }}>{t('Qty')}</th><th style={{ width: 90 }}>{t('Unit')}</th><th style={{ width: 120 }}>{t('Unit cost')}</th><th style={{ minWidth: 200 }}>{t('Why / reason')}</th><th /></tr></thead>
             <tbody>
               {d.items.map((it, i) => (
                 <tr key={i} style={it.received ? { opacity: 0.6 } : undefined}>
                   <td className="muted">{i + 1}</td>
                   <td>
                     <Combobox value={it.name} onChange={(v) => setItem(i, { name: v, partId: byName.get(v)?.id })} onPick={(v) => pickPart(i, v)} options={partNames} placeholder="Type a part name…"
-                      renderSub={(n) => { const p = byName.get(n); return p ? `${p.qty} in stock` : ''; }} />
-                    {it.partId && <div className="small muted" style={{ marginTop: 4 }}><Link2 size={13} style={{ verticalAlign: -2 }} /> Linked to inventory{it.received ? ' · received' : ''}</div>}
+                      renderSub={(n) => { const p = byName.get(n); return p ? `${p.qty} ${t('in stock')}` : ''; }} />
+                    {it.partId && <div className="small muted" style={{ marginTop: 4 }}><Link2 size={13} style={{ verticalAlign: -2 }} /> {t('Linked to inventory')}{it.received ? ` · ${t('received')}` : ''}</div>}
                   </td>
                   <td><input className="input mono" value={it.partNumber || ''} onChange={(e) => setItem(i, { partNumber: e.target.value })} /></td>
                   <td><input className="input" value={it.manufacturer || ''} onChange={(e) => setItem(i, { manufacturer: e.target.value })} /></td>
                   <td><NumberInput value={it.qty} onChange={(v) => setItem(i, { qty: v ?? 0 })} min={0} /></td>
                   <td><input className="input" value={it.unit || ''} onChange={(e) => setItem(i, { unit: e.target.value })} placeholder="ea" /></td>
                   <td><NumberInput value={it.unitCost} onChange={(v) => setItem(i, { unitCost: v ?? undefined })} min={0} placeholder="0.00" /></td>
-                  <td><input className="input" value={it.reason || ''} onChange={(e) => setItem(i, { reason: e.target.value })} placeholder="e.g. BM2 seal bar failed"
+                  <td><input className="input" value={it.reason || ''} onChange={(e) => setItem(i, { reason: e.target.value })} placeholder={t('e.g. BM2 seal bar failed')}
                     onKeyDown={(e) => { if (e.key === 'Enter' && i === d.items.length - 1) { e.preventDefault(); set('items', [...d.items, blankItem()]); } }} /></td>
                   <td>
                     <div className="row" style={{ gap: 4 }}>
-                      {it.url && <a className="btn sm icon" href={it.url} target="_blank" rel="noreferrer" title="Order page"><ExternalLink size={16} /></a>}
-                      {canEdit && <button type="button" className="btn sm icon ghost" onClick={() => set('items', d.items.filter((_, j) => j !== i))} aria-label="Remove line"><Trash2 size={17} /></button>}
+                      {it.url && <a className="btn sm icon" href={it.url} target="_blank" rel="noreferrer" title={t('Order page')}><ExternalLink size={16} /></a>}
+                      {canEdit && <button type="button" className="btn sm icon ghost" onClick={() => set('items', d.items.filter((_, j) => j !== i))} aria-label={t('Remove line')}><Trash2 size={17} /></button>}
                     </div>
                   </td>
                 </tr>
@@ -239,15 +240,15 @@ function OrderEditor({ id, query }: { id: string; query: URLSearchParams }) {
           </table>
         </div>
         <div className="row wrap" style={{ justifyContent: 'space-between', marginTop: '0.8rem' }}>
-          {canEdit ? <button type="button" className="btn" onClick={() => set('items', [...d.items, blankItem()])}><Plus size={18} />Add line</button> : <span />}
-          <div style={{ fontSize: '1.15rem' }}>Estimated total: <b>{money(total)}</b></div>
+          {canEdit ? <button type="button" className="btn" onClick={() => set('items', [...d.items, blankItem()])}><Plus size={18} />{t('Add line')}</button> : <span />}
+          <div style={{ fontSize: '1.15rem' }}>{t('Estimated total:')} <b>{money(total)}</b></div>
         </div>
 
         <div className="card card-pad" style={{ marginTop: '1.2rem' }}>
-          <Field label="Notes (printed on the form)"><textarea className="input" value={d.notes || ''} onChange={(e) => set('notes', e.target.value)} placeholder="Anything purchasing should know…" /></Field>
+          <Field label="Notes (printed on the form)"><textarea className="input" value={d.notes || ''} onChange={(e) => set('notes', e.target.value)} placeholder={t('Anything purchasing should know…')} /></Field>
         </div>
       </fieldset>
-      {canEdit && !isNew && <div style={{ marginTop: '1.5rem' }}><button className="btn danger-ghost" onClick={remove}><Trash2 size={18} />Delete order guide</button></div>}
+      {canEdit && !isNew && <div style={{ marginTop: '1.5rem' }}><button className="btn danger-ghost" onClick={remove}><Trash2 size={18} />{t('Delete order guide')}</button></div>}
     </div>
   );
 }
@@ -341,14 +342,14 @@ export function OrderPrintPage({ id }: { id: string }) {
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh', padding: '1rem' }}>
       <div className="no-print row wrap" style={{ maxWidth: '8.5in', margin: '0 auto 1rem', justifyContent: 'space-between' }}>
-        <button className="btn lg" onClick={() => (history.length > 1 ? history.back() : navigate('/orders'))}><ArrowLeft />Back</button>
+        <button className="btn lg" onClick={() => (history.length > 1 ? history.back() : navigate('/orders'))}><ArrowLeft />{t('Back')}</button>
         <div className="btn-group">
-          <a className="btn" href="#/admin/print" title="Change the printed layout"><FileDown size={18} />Edit layout</a>
-          <button className="btn primary lg" onClick={() => window.print()}><Printer />Print</button>
+          <a className="btn" href="#/admin/print" title={t('Change the printed layout')}><FileDown size={18} />{t('Edit layout')}</a>
+          <button className="btn primary lg" onClick={() => window.print()}><Printer />{t('Print')}</button>
         </div>
       </div>
       {!blank && !order ? <Empty title="Order guide not found" /> : <OrderSheet order={blank ? { items: [] } : order!} tpl={tpl} settings={settings} blankRows={blank ? 14 : Math.max(0, 6 - (order?.items.length || 0))} />}
-      <p className="no-print muted center small" style={{ marginTop: '1rem' }}>Tip: in the print window choose “Save as PDF” to email it instead.</p>
+      <p className="no-print muted center small" style={{ marginTop: '1rem' }}>{t('Tip: in the print window choose “Save as PDF” to email it instead.')}{getLang() === 'es' ? ` ${t('The printed form stays in English so purchasing gets the same form every time.')}` : ''}</p>
     </div>
   );
 }

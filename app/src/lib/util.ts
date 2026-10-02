@@ -1,6 +1,7 @@
 // Small helpers: routing, formatting, CSV, images, downloads.
 import { useEffect, useState } from 'react';
 import { stockStatus, type Equipment, type Part, type Settings, type StockStatus } from '../../../shared/types';
+import { locale, plural, t } from './i18n';
 
 // ------------------------------------------------------------ hash router (works on file:// too)
 export interface Route { path: string; parts: string[]; query: URLSearchParams }
@@ -35,41 +36,41 @@ export const DAY = 86_400_000;
 export function fmtDate(t?: number | string | null) {
   if (!t) return '—';
   const d = typeof t === 'string' ? new Date(t + (t.length === 10 ? 'T00:00:00' : '')) : new Date(t);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString(locale(), { month: 'short', day: 'numeric', year: 'numeric' });
 }
 export function fmtDateTime(t?: number | null) {
   if (!t) return '—';
-  return new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return new Date(t).toLocaleString(locale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
-export function timeAgo(t?: number | null) {
-  if (!t) return '—';
-  const s = Math.round((Date.now() - t) / 1000);
-  if (s < 45) return 'just now';
-  const m = Math.round(s / 60); if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60); if (h < 24) return `${h} hr${h > 1 ? 's' : ''} ago`;
-  const d = Math.round(h / 24); if (d < 14) return `${d} day${d > 1 ? 's' : ''} ago`;
-  return fmtDate(t);
+export function timeAgo(at?: number | null) {
+  if (!at) return '—';
+  const s = Math.round((Date.now() - at) / 1000);
+  if (s < 45) return t('just now');
+  const m = Math.round(s / 60); if (m < 60) return t('{n} min ago', { n: m });
+  const h = Math.round(m / 60); if (h < 24) return plural(h, '{n} hr ago', '{n} hrs ago');
+  const d = Math.round(h / 24); if (d < 14) return plural(d, '{n} day ago', '{n} days ago');
+  return fmtDate(at);
 }
 export function durationDays(from?: number | null, to = Date.now()) {
   if (!from) return 0;
   return Math.max(0, Math.floor((to - from) / DAY));
 }
 export function fmtDuration(days: number) {
-  if (days < 1) return 'Today';
-  if (days < 60) return `${days} day${days === 1 ? '' : 's'}`;
+  if (days < 1) return t('Today');
+  if (days < 60) return plural(days, '{n} day', '{n} days');
   const months = days / 30.44;
-  if (months < 24) return `${months.toFixed(1)} months`;
-  return `${(days / 365.25).toFixed(1)} years`;
+  if (months < 24) return t('{n} months', { n: months.toLocaleString(locale(), { maximumFractionDigits: 1, minimumFractionDigits: 1 }) });
+  return t('{n} years', { n: (days / 365.25).toLocaleString(locale(), { maximumFractionDigits: 1, minimumFractionDigits: 1 }) });
 }
 let currency = 'USD';
 export function setCurrency(c?: string) { currency = c || 'USD'; }
 export function money(n?: number | null, digits = 2) {
   if (n == null || !Number.isFinite(n)) return '—';
-  try { return n.toLocaleString(undefined, { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }); } catch { return `$${n.toFixed(digits)}`; }
+  try { return n.toLocaleString(locale(), { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits }); } catch { return `$${n.toFixed(digits)}`; }
 }
 export function num(n?: number | null) {
   if (n == null || !Number.isFinite(n)) return '—';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return n.toLocaleString(locale(), { maximumFractionDigits: 2 });
 }
 export function bytes(n: number) {
   if (n < 1024) return `${n} B`;
@@ -91,7 +92,14 @@ export function avatarColor(s: string) {
 }
 
 // ------------------------------------------------------------ domain helpers
-export const STATUS_LABEL: Record<StockStatus, string> = { ok: 'In stock', low: 'Running low', order: 'Order now', out: 'Out of stock', retired: 'Decommissioned' };
+/**
+ * A label map whose values are translated when read, so module-level maps like
+ * STATUS_LABEL follow the screen language: tmap({ ok: 'In stock' }).ok → "En existencia".
+ */
+export function tmap<T extends Record<string, string>>(m: T): T {
+  return new Proxy(m, { get: (o, k) => (typeof k === 'string' && k in o ? t(o[k as keyof T] as string) : undefined) });
+}
+export const STATUS_LABEL: Record<StockStatus, string> = tmap({ ok: 'In stock', low: 'Running low', order: 'Order now', out: 'Out of stock', retired: 'Decommissioned' });
 export { stockStatus };
 export function partValue(p: Part) { return (p.unitCost || 0) * Math.max(0, p.qty || 0); }
 export function reorderQty(p: Part) {

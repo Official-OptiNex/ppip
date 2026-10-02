@@ -3,7 +3,8 @@ import { Upload, Download, FileSpreadsheet, FileJson, ArrowRight, CheckCircle2, 
 import { api, errorMessage } from '../lib/api';
 import { loadBootstrap, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { download, exportExcel, readSpreadsheet, stockStatus, STATUS_LABEL, toCSV, fmtDate, todayISO } from '../lib/util';
-import { Field, Modal, Seg, Spinner } from '../components/ui';
+import { Field, Modal, Seg, Spinner, rich } from '../components/ui';
+import { t } from '../lib/i18n';
 import type { Movement } from '../../../shared/types';
 
 // Columns we understand, plus common header spellings people use in spreadsheets.
@@ -34,6 +35,8 @@ const normH = (s: string) => s.toLowerCase().replace(/[^a-z0-9#/ ]/g, ' ').repla
 export function DataPage() {
   const parts = useStore((s) => s.docs.parts);
   const equipment = useStore((s) => s.docs.equipment);
+  const downtime = useStore((s) => s.docs.downtime);
+  const cores = useStore((s) => s.docs.cores);
   const canEdit = useCanEdit();
   const [importing, setImporting] = useState<{ headers: string[]; rows: string[][]; file: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,7 +59,15 @@ export function DataPage() {
       download(`stock-history-${todayISO()}.csv`, '﻿' + toCSV(rows.map((m) => ({ date: new Date(m.at).toLocaleString(), part: m.partName, type: m.kind, change: m.delta, after: m.qtyAfter, machine: m.machine, by: m.userName, note: m.note, unitCost: m.unitCost }))), 'text/csv');
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
-  const exportEquipment = () => download(`knives-rollers-${todayISO()}.csv`, '﻿' + toCSV(Object.values(equipment).map((e) => ({ ...e, installedAt: e.installedAt ? fmtDate(e.installedAt) : '', lastServiceAt: e.lastServiceAt ? fmtDate(e.lastServiceAt) : '' }))), 'text/csv');
+  // one row per install → pull so the sheet shows which machine / welder, when, how long and why
+  const exportEquipment = () => download(`knives-rollers-horns-anvils-${todayISO()}.csv`, '\ufeff' + toCSV(Object.values(equipment).sort((a, b) => a.type.localeCompare(b.type) || a.tag.localeCompare(b.tag, undefined, { numeric: true })).flatMap((e): Record<string, unknown>[] => {
+    const base = { type: e.type, tag: e.tag, status: e.status, onNow: e.machine || '', partNumber: e.partNumber || '', notes: e.notes || '' };
+    const h = e.history || [];
+    if (!h.length) return [{ ...base, machine: '', installed: '', pulled: '', days: '', reason: '' }];
+    return h.map((x) => ({ ...base, machine: x.machine, installed: fmtDate(x.installedAt), pulled: x.removedAt ? fmtDate(x.removedAt) : 'still on', days: Math.max(0, Math.round(((x.removedAt || Date.now()) - x.installedAt) / 86_400_000)), reason: x.reason || '' }));
+  })), 'text/csv');
+  const exportDowntime = () => download(`downtime-${todayISO()}.csv`, '\ufeff' + toCSV(Object.values(downtime).sort((a, b) => b.startedAt - a.startedAt).map((d) => ({ started: new Date(d.startedAt).toLocaleString(), machine: d.machine, welder: d.welder || '', minutes: d.minutes ?? '', category: d.category || '', whatHappened: d.problem, fix: d.fix || '', bagsPerMinute: d.bpm ?? '', reportedBy: d.reportedBy || '' }))), 'text/csv');
+  const exportCores = () => download(`crushed-cores-${todayISO()}.csv`, '\ufeff' + toCSV(Object.values(cores).sort((a, b) => b.at - a.at).map((c) => ({ date: new Date(c.at).toLocaleString(), tag: c.tag, machine: c.machine || '', notes: c.notes || '', loggedBy: c.reportedBy || '' }))), 'text/csv');
   const exportAll = async () => {
     setBusy(true);
     try { const data = await api('/export'); download(`ppip-all-data-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json'); } catch (e) { toastError(e); } finally { setBusy(false); }
@@ -68,41 +79,43 @@ export function DataPage() {
     setBusy(true);
     try {
       const rows = await readSpreadsheet(f);
-      if (rows.length < 2) throw new Error('The file has no data rows.');
+      if (rows.length < 2) throw new Error(t('The file has no data rows.'));
       setImporting({ headers: rows[0].map((h) => String(h).trim()), rows: rows.slice(1), file: f.name });
-    } catch (e) { toast('Could not read the file', 'danger', errorMessage(e)); } finally { setBusy(false); }
+    } catch (e) { toast(t('Could not read the file'), 'danger', t(errorMessage(e))); } finally { setBusy(false); }
   };
 
   return (
     <div className="stack">
-      <div className="page-head" style={{ marginBottom: 0 }}><div><h1>Import / Export</h1><div className="sub">Bring in an existing spreadsheet, or take your data anywhere. Excel and CSV both work.</div></div>{busy && <Spinner />}</div>
+      <div className="page-head" style={{ marginBottom: 0 }}><div><h1>{t('Import / Export')}</h1><div className="sub">{t('Bring in an existing spreadsheet, or take your data anywhere. Excel and CSV both work.')}</div></div>{busy && <Spinner />}</div>
       <div className="grid-cards">
         <div className="card">
-          <div className="card-head"><h3><Upload size={19} style={{ verticalAlign: -3 }} /> Import parts</h3></div>
+          <div className="card-head"><h3><Upload size={19} style={{ verticalAlign: -3 }} /> {t('Import parts')}</h3></div>
           <div className="card-body stack">
             {canEdit ? <>
-              <p>Upload an <b>Excel (.xlsx)</b> or <b>CSV</b> file. The first row should be column headings — we'll match them up for you and show a preview before anything is saved.</p>
+              <p>{rich("Upload an **Excel (.xlsx)** or **CSV** file. The first row should be column headings — we'll match them up for you and show a preview before anything is saved.")}</p>
               <label className="dropzone" style={{ display: 'block', cursor: 'pointer' }}
                 onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files?.[0]); }}>
                 <input type="file" accept=".csv,.xlsx,.txt,.tsv" hidden onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ''; }} />
                 <FileSpreadsheet size={40} color="var(--primary)" />
-                <div style={{ fontWeight: 700, marginTop: 6 }}>Choose a file or drop it here</div>
+                <div style={{ fontWeight: 700, marginTop: 6 }}>{t('Choose a file or drop it here')}</div>
                 <div className="small muted">.xlsx, .csv</div>
               </label>
-              <button className="btn" onClick={template}><FileDown size={18} />Download a template</button>
-              <p className="small muted" style={{ margin: 0 }}>Parts with the same part # + manufacturer (or the same ID from an export) are updated instead of duplicated.</p>
-            </> : <div className="banner info">View-only accounts can't import.</div>}
+              <button className="btn" onClick={template}><FileDown size={18} />{t('Download a template')}</button>
+              <p className="small muted" style={{ margin: 0 }}>{t('Parts with the same part # + manufacturer (or the same ID from an export) are updated instead of duplicated.')}</p>
+            </> : <div className="banner info">{t("View-only accounts can't import.")}</div>}
           </div>
         </div>
         <div className="card">
-          <div className="card-head"><h3><Download size={19} style={{ verticalAlign: -3 }} /> Export</h3></div>
+          <div className="card-head"><h3><Download size={19} style={{ verticalAlign: -3 }} /> {t('Export')}</h3></div>
           <div className="card-body col">
-            <button className="btn lg" onClick={() => exportParts('xlsx')}><FileSpreadsheet />All parts — Excel (.xlsx)</button>
-            <button className="btn lg" onClick={() => exportParts('csv')}><FileSpreadsheet />All parts — CSV</button>
-            <button className="btn lg" onClick={exportMovements}><FileSpreadsheet />Stock history (usage log) — CSV</button>
-            <button className="btn lg" onClick={exportEquipment}><FileSpreadsheet />Hot knives & rollers — CSV</button>
-            <button className="btn lg" onClick={exportAll}><FileJson />Everything — full backup (.json)</button>
-            <p className="small muted" style={{ margin: 0 }}>Data is also backed up automatically every day (see Admin → Backups).</p>
+            <button className="btn lg" onClick={() => exportParts('xlsx')}><FileSpreadsheet />{t('All parts — Excel (.xlsx)')}</button>
+            <button className="btn lg" onClick={() => exportParts('csv')}><FileSpreadsheet />{t('All parts — CSV')}</button>
+            <button className="btn lg" onClick={exportMovements}><FileSpreadsheet />{t('Stock history (usage log) — CSV')}</button>
+            <button className="btn lg" onClick={exportEquipment}><FileSpreadsheet />{t('Knives, rollers, horns & anvils with install history — CSV')}</button>
+            <button className="btn lg" onClick={exportDowntime}><FileSpreadsheet />{t('Downtime log — CSV')}</button>
+            <button className="btn lg" onClick={exportCores}><FileSpreadsheet />{t('Crushed cores — CSV')}</button>
+            <button className="btn lg" onClick={exportAll}><FileJson />{t('Everything — full backup (.json)')}</button>
+            <p className="small muted" style={{ margin: 0 }}>{t('Data is also backed up automatically every day (see Admin → Backups).')}</p>
           </div>
         </div>
       </div>
@@ -160,38 +173,38 @@ function ImportWizard({ data, onClose }: { data: { headers: string[]; rows: stri
   };
 
   if (result) return (
-    <Modal title="Import finished" onClose={onClose} footer={<><a className="btn primary lg" href="#/parts" onClick={onClose}>See parts</a></>}>
+    <Modal title="Import finished" onClose={onClose} footer={<><a className="btn primary lg" href="#/parts" onClick={onClose}>{t('See parts')}</a></>}>
       <div className="center stack">
         <CheckCircle2 size={56} color="var(--ok)" />
-        <div style={{ fontSize: '1.2rem' }}><b>{result.created}</b> added · <b>{result.updated}</b> updated · <b>{result.skipped}</b> skipped</div>
+        <div style={{ fontSize: '1.2rem' }}>{t('{a} added · {b} updated · {c} skipped', { a: result.created, b: result.updated, c: result.skipped })}</div>
         {result.errors.length > 0 && <div className="banner warn" style={{ textAlign: 'left' }}><div>{result.errors.map((e, i) => <div key={i}>{e}</div>)}</div></div>}
       </div>
     </Modal>
   );
 
   return (
-    <Modal title={`Import “${data.file}”`} onClose={onClose} size="xwide"
-      footer={<><span className="left muted">{rows.length} of {data.rows.length} rows will be imported{rows.length < data.rows.length ? ' (rows without a name are skipped)' : ''}</span>
-        <button className="btn lg" onClick={onClose}>Cancel</button>
-        <button className="btn primary lg" onClick={run} disabled={busy || !rows.length || map.name == null}>{busy ? 'Importing…' : <>Import {rows.length} parts <ArrowRight /></>}</button></>}>
+    <Modal title={`${t('Import')} “${data.file}”`} onClose={onClose} size="xwide"
+      footer={<><span className="left muted">{t('{a} of {b} rows will be imported', { a: rows.length, b: data.rows.length })}{rows.length < data.rows.length ? ` ${t('(rows without a name are skipped)')}` : ''}</span>
+        <button className="btn lg" onClick={onClose}>{t('Cancel')}</button>
+        <button className="btn primary lg" onClick={run} disabled={busy || !rows.length || map.name == null}>{busy ? t('Importing…') : <>{t('Import {n} parts', { n: rows.length })} <ArrowRight /></>}</button></>}>
       <div className="stack">
-        <h3>1. Match your columns</h3>
+        <h3>{t('1. Match your columns')}</h3>
         <div className="grid-form" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
           {PART_FIELDS.map((f) => (
             <Field key={f.key} label={f.label}>
               <select className="input" value={map[f.key] ?? -1} onChange={(e) => setMap({ ...map, [f.key]: Number(e.target.value) })} style={map[f.key] != null && map[f.key] >= 0 ? { borderColor: 'var(--ok)' } : undefined}>
-                <option value={-1}>— not in file —</option>
-                {data.headers.map((h, i) => <option key={i} value={i}>{h || `(column ${i + 1})`}</option>)}
+                <option value={-1}>{t('— not in file —')}</option>
+                {data.headers.map((h, i) => <option key={i} value={i}>{h || `(${t('column')} ${i + 1})`}</option>)}
               </select>
             </Field>
           ))}
         </div>
-        <h3>2. If a part already exists</h3>
+        <h3>{t('2. If a part already exists')}</h3>
         <Seg value={mode} onChange={setMode} options={[{ id: 'update', label: 'Update it with the file' }, { id: 'skip', label: 'Leave it alone' }]} />
-        <h3>3. Preview</h3>
+        <h3>{t('3. Preview')}</h3>
         <div className="table-wrap" style={{ maxHeight: 320 }}>
           <table className="tbl">
-            <thead><tr>{['name', 'partNumber', 'manufacturer', 'location', 'qty', 'minQty', 'unitCost', 'vendor'].map((k) => <th key={k}>{PART_FIELDS.find((f) => f.key === k)?.label.replace(' *', '')}</th>)}</tr></thead>
+            <thead><tr>{['name', 'partNumber', 'manufacturer', 'location', 'qty', 'minQty', 'unitCost', 'vendor'].map((k) => <th key={k}>{t(PART_FIELDS.find((f) => f.key === k)?.label.replace(' *', '') || '')}</th>)}</tr></thead>
             <tbody>{rows.slice(0, 12).map((r, i) => <tr key={i}>{['name', 'partNumber', 'manufacturer', 'location', 'qty', 'minQty', 'unitCost', 'vendor'].map((k) => <td key={k}>{String(r[k] ?? '')}</td>)}</tr>)}</tbody>
           </table>
         </div>

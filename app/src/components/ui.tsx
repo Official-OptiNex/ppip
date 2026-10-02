@@ -2,7 +2,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { X, Search, Inbox, ShoppingCart, AlertTriangle, CheckCircle2, XCircle, Archive, ArrowUpRight, Info } from 'lucide-react';
 import { useStore, dismissToast } from '../lib/store';
-import { STATUS_LABEL } from '../lib/util';
+import { STATUS_LABEL, avatarColor, initials } from '../lib/util';
+import { t as tr } from '../lib/i18n';
 import type { StockStatus } from '../../../shared/types';
 import { imageUrl } from '../lib/api';
 
@@ -22,8 +23,8 @@ export function Modal({ title, onClose, children, footer, size, icon }: {
       <div className={`modal ${size || ''}`} role="dialog" aria-modal="true">
         <div className="modal-head">
           {icon}
-          <h2>{title}</h2>
-          <button className="btn icon ghost" onClick={onClose} aria-label="Close"><X size={22} /></button>
+          <h2>{tx(title)}</h2>
+          <button className="btn icon ghost" onClick={onClose} aria-label={tr('Close')}><X size={22} /></button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
@@ -44,7 +45,7 @@ export function Drawer({ onClose, children, head }: { onClose: () => void; child
       <aside className="drawer" role="dialog" aria-modal="true">
         <div className="drawer-head">
           <div className="grow">{head}</div>
-          <button className="btn icon ghost" onClick={onClose} aria-label="Close"><X size={22} /></button>
+          <button className="btn icon ghost" onClick={onClose} aria-label={tr('Close')}><X size={22} /></button>
         </div>
         <div className="drawer-body">{children}</div>
       </aside>
@@ -64,12 +65,12 @@ export function ConfirmHost() {
   if (!o) return null;
   const close = (v: boolean) => { o.resolve(v); setO(null); };
   return (
-    <Modal title={o.title} onClose={() => close(false)} icon={o.danger ? <AlertTriangle color="var(--danger)" /> : undefined}
+    <Modal title={tr(o.title)} onClose={() => close(false)} icon={o.danger ? <AlertTriangle color="var(--danger)" /> : undefined}
       footer={<>
-        <button className="btn lg" onClick={() => close(false)}>Cancel</button>
-        <button className={`btn lg ${o.danger ? 'danger' : 'primary'}`} autoFocus onClick={() => close(true)}>{o.confirm || 'OK'}</button>
+        <button className="btn lg" onClick={() => close(false)}>{tr('Cancel')}</button>
+        <button className={`btn lg ${o.danger ? 'danger' : 'primary'}`} autoFocus onClick={() => close(true)}>{tr(o.confirm || 'OK')}</button>
       </>}>
-      <div style={{ fontSize: '1.05rem' }}>{o.body}</div>
+      <div style={{ fontSize: '1.05rem' }}>{tx(o.body)}</div>
     </Modal>
   );
 }
@@ -78,17 +79,17 @@ export function Toasts() {
   const toasts = useStore((s) => s.toasts);
   return (
     <div className="toasts" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={`toast ${t.kind || ''}`}>
+      {toasts.map((m) => (
+        <div key={m.id} className={`toast ${m.kind || ''}`}>
           <div style={{ paddingTop: 2 }}>
-            {t.kind === 'danger' ? <XCircle color="var(--danger)" /> : t.kind === 'warn' ? <AlertTriangle color="var(--warn)" /> : t.kind === 'info' ? <Info color="var(--primary)" /> : <CheckCircle2 color="var(--ok)" />}
+            {m.kind === 'danger' ? <XCircle color="var(--danger)" /> : m.kind === 'warn' ? <AlertTriangle color="var(--warn)" /> : m.kind === 'info' ? <Info color="var(--primary)" /> : <CheckCircle2 color="var(--ok)" />}
           </div>
           <div className="grow">
-            <div className="t-title">{t.title}</div>
-            {t.body && <div className="t-body">{t.body}</div>}
-            {t.link && <a href={t.link} className="small" onClick={() => dismissToast(t.id)}>Open <ArrowUpRight size={14} style={{ verticalAlign: -2 }} /></a>}
+            <div className="t-title">{tr(m.title)}</div>
+            {m.body && <div className="t-body">{tr(m.body)}</div>}
+            {m.link && <a href={m.link} className="small" onClick={() => dismissToast(m.id)}>{tr('Open')} <ArrowUpRight size={14} style={{ verticalAlign: -2 }} /></a>}
           </div>
-          <button className="btn icon sm ghost" onClick={() => dismissToast(t.id)} aria-label="Dismiss"><X size={18} /></button>
+          <button className="btn icon sm ghost" onClick={() => dismissToast(m.id)} aria-label={tr('Dismiss')}><X size={18} /></button>
         </div>
       ))}
     </div>
@@ -98,9 +99,9 @@ export function Toasts() {
 export function Field({ label, children, hint, required, className }: { label: ReactNode; children: ReactNode; hint?: ReactNode; required?: boolean; className?: string }) {
   return (
     <div className={`field ${className || ''}`}>
-      <label>{label}{required && <span className="req"> *</span>}</label>
+      <label>{tx(label)}{required && <span className="req"> *</span>}</label>
       {children}
-      {hint && <div className="hint">{hint}</div>}
+      {hint && <div className="hint">{tx(hint)}</div>}
     </div>
   );
 }
@@ -111,9 +112,9 @@ export function SearchInput({ value, onChange, placeholder, autoFocus, inputRef,
   return (
     <div className="input-wrap grow">
       <Search size={20} />
-      <input ref={inputRef} className="input" type="search" value={value} placeholder={placeholder || 'Search…'} autoFocus={autoFocus}
+      <input ref={inputRef} className="input" type="search" value={value} placeholder={tr(placeholder || 'Search…')} autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} style={{ minHeight: '3rem', fontSize: '1.05rem' }} />
-      {value && <button className="btn icon sm ghost clear" onClick={() => onChange('')} aria-label="Clear search"><X size={18} /></button>}
+      {value && <button className="btn icon sm ghost clear" onClick={() => onChange('')} aria-label={tr('Clear search')}><X size={18} /></button>}
     </div>
   );
 }
@@ -136,7 +137,7 @@ export function Combobox({ value, onChange, options, placeholder, onPick, render
   const pick = (v: string) => { onChange(v); onPick?.(v); setOpen(false); };
   return (
     <div className={`combo ${className || ''}`}>
-      <input id={id} className="input" value={value} placeholder={placeholder} autoFocus={autoFocus} autoComplete="off" role="combobox" aria-expanded={open} aria-controls={listId}
+      <input id={id} className="input" value={value} placeholder={placeholder && tr(placeholder)} autoFocus={autoFocus} autoComplete="off" role="combobox" aria-expanded={open} aria-controls={listId}
         onChange={(e) => { onChange(e.target.value); setOpen(true); setActive(0); }}
         onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
@@ -167,11 +168,11 @@ export function TagInput({ values, onChange, options, placeholder }: { values: s
     <div className="col" style={{ gap: '0.45rem' }}>
       {values.length > 0 && (
         <div className="chips">
-          {values.map((v) => <span className="chip" key={v}>{v}<button type="button" onClick={() => onChange(values.filter((x) => x !== v))} aria-label={`Remove ${v}`}><X size={15} /></button></span>)}
+          {values.map((v) => <span className="chip" key={v}>{v}<button type="button" onClick={() => onChange(values.filter((x) => x !== v))} aria-label={tr('Remove {v}', { v })}><X size={15} /></button></span>)}
         </div>
       )}
       <div onKeyDown={(e) => { if (e.key === 'Enter' && text.trim()) { e.preventDefault(); add(text); } }}>
-        <Combobox value={text} onChange={setText} options={options.filter((o) => !values.includes(o))} placeholder={placeholder || 'Type and press Enter'} onPick={add} />
+        <Combobox value={text} onChange={setText} options={options.filter((o) => !values.includes(o))} placeholder={placeholder || tr('Type and press Enter')} onPick={add} />
       </div>
     </div>
   );
@@ -186,8 +187,8 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
   return (
     <div className="empty">
       {icon || <Inbox size={48} />}
-      <h3>{title}</h3>
-      {children && <div>{children}</div>}
+      <h3>{tr(title)}</h3>
+      {children && <div>{tx(children)}</div>}
     </div>
   );
 }
@@ -207,7 +208,7 @@ function PartGlyph() {
 export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; onChange: (v: T) => void; tabs: { id: T; label: ReactNode }[] }) {
   return (
     <div className="tabs" role="tablist">
-      {tabs.map((t) => <button key={t.id} role="tab" aria-selected={value === t.id} className={value === t.id ? 'on' : ''} onClick={() => onChange(t.id)}>{t.label}</button>)}
+      {tabs.map((x) => <button key={x.id} role="tab" aria-selected={value === x.id} className={value === x.id ? 'on' : ''} onClick={() => onChange(x.id)}>{tx(x.label)}</button>)}
     </div>
   );
 }
@@ -215,7 +216,7 @@ export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; on
 export function Seg<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { id: T; label: ReactNode }[] }) {
   return (
     <div className="seg" role="radiogroup">
-      {options.map((o) => <button type="button" key={o.id} role="radio" aria-checked={value === o.id} className={value === o.id ? 'on' : ''} onClick={() => onChange(o.id)}>{o.label}</button>)}
+      {options.map((o) => <button type="button" key={o.id} role="radio" aria-checked={value === o.id} className={value === o.id ? 'on' : ''} onClick={() => onChange(o.id)}>{tx(o.label)}</button>)}
     </div>
   );
 }
@@ -256,4 +257,21 @@ export function NumberInput({ value, onChange, placeholder, min, step, className
   );
 }
 
-export function Spinner() { return <div className="spinner" aria-label="Loading" />; }
+export function Spinner() { return <div className="spinner" aria-label={tr('Loading')} />; }
+
+/** Translated text with **bold** parts: rich('Click **Save**') → Click <b>Save</b>. */
+export function rich(en: string, vars?: Record<string, string | number>): ReactNode {
+  const parts = tr(en, vars).split('**');
+  return <>{parts.map((p, i) => (i % 2 ? <b key={i}>{p}</b> : p))}</>;
+}
+
+/** Plain text gets translated; anything else (elements, numbers) is shown as is. */
+export function tx(v: ReactNode): ReactNode { return typeof v === 'string' ? tr(v) : v; }
+
+/** Round profile picture, or coloured initials when there is no photo. */
+export function Avatar({ name, image, size }: { name: string; image?: string | null; size?: number }) {
+  const [err, setErr] = useState(false);
+  const style = size ? { width: size, height: size, fontSize: size * 0.36 } : undefined;
+  if (image && !err) return <img className="avatar" src={imageUrl(image, true)} alt={name} title={name} style={style} onError={() => setErr(true)} />;
+  return <span className="avatar" title={name} style={{ ...style, background: avatarColor(name) }}>{initials(name)}</span>;
+}
