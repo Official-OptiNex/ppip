@@ -9,6 +9,7 @@ import { HBarList } from '../components/Charts';
 
 const STATUS_LABEL: Record<Equipment['status'], string> = { installed: 'On machine', spare: 'Spare', repair: 'Repair / rebuild', retired: 'Retired' };
 const STATUS_CLS: Record<Equipment['status'], string> = { installed: 'ok', spare: 'info', repair: 'warn', retired: 'retired' };
+const statusLabel = (e: Equipment) => (e.status === 'installed' && (e.type === 'horn' || e.type === 'anvil') ? 'On welder' : STATUS_LABEL[e.status]);
 const BAG: Record<string, string> = { small: 'Small bag', medium: 'Medium bag', large: 'Large bag', custom: 'Custom' };
 
 const isWeld = (t: EquipmentType) => t === 'horn' || t === 'anvil';
@@ -16,6 +17,7 @@ const isWeld = (t: EquipmentType) => t === 'horn' || t === 'anvil';
 export const hostWord = (t: EquipmentType) => (isWeld(t) ? 'welder' : 'machine');
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 const DAY_MS = 86_400_000;
+export { isWeld };
 export const stintDays = (h: Stint, now = Date.now()) => Math.max(0, Math.round(((h.removedAt || now) - h.installedAt) / DAY_MS));
 const toISO = (t: number) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const fromISO = (iso: string) => new Date(iso + 'T12:00:00').getTime();
@@ -148,7 +150,7 @@ export function EquipmentPage({ type, query, embedded }: { type: EquipmentType; 
                   <td>{e.machine ? <><b>{e.machine}</b>{e.position && <div className="small muted">{e.position}</div>}</> : <span className="muted">—</span>}</td>
                   <td>{e.status === 'installed' ? fmtDate(e.installedAt) : '—'}</td>
                   <td><PmBar pm={pm} /></td>
-                  <td><span className={`pill ${STATUS_CLS[e.status]}`}>{STATUS_LABEL[e.status]}</span></td>
+                  <td><span className={`pill ${STATUS_CLS[e.status]}`}>{statusLabel(e)}</span></td>
                   <td onClick={(ev) => ev.stopPropagation()}><Actions e={e} canEdit={canEdit} onAction={(kind) => setAction({ e, kind })} onEdit={() => setEditing(e)} /></td>
                 </tr>
               ))}
@@ -357,7 +359,7 @@ function InstallHistory({ e }: { e: Equipment }) {
   );
 }
 
-function ReasonPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function ReasonPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="row wrap" style={{ gap: 6 }} role="group" aria-label="Removal reason">
       {REMOVAL_REASONS.map((r) => (
@@ -435,7 +437,7 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
   }, [e.id, e.updatedAt]);
   const remove = async () => { if (await deleteForever(e)) onClose(); };
   return (
-    <Drawer onClose={onClose} head={<div className="row"><span className={`pill ${STATUS_CLS[e.status]}`}>{STATUS_LABEL[e.status]}</span></div>}>
+    <Drawer onClose={onClose} head={<div className="row"><span className={`pill ${STATUS_CLS[e.status]}`}>{statusLabel(e)}</span></div>}>
       <div className="stack">
         <div>
           <div className="muted" style={{ fontWeight: 700 }}>{EQUIPMENT_LABEL[e.type].one}</div>
@@ -527,7 +529,10 @@ function ActionDialog({ e, kind, onClose }: { e: Equipment; kind: ActionKind; on
         {needsMachine && <>
           <Field label={cap(host)} required><Combobox value={machine} onChange={setMachine} options={machines} placeholder={host === 'welder' ? 'e.g. Welder 1' : 'e.g. Bag Machine 2'} autoFocus /></Field>
           {e.type === 'roller' && <Field label="Position (optional)" hint="Front / rear, upper / lower, station #…"><input className="input" value={position} onChange={(ev) => setPosition(ev.target.value)} /></Field>}
-          {occupying.length > 0 && <div className="banner warn">Already on {machine}: {occupying.map((x) => `${x.tag}${x.position ? ` (${x.position})` : ''}`).join(', ')}. Remove it first if this {one} replaces it.</div>}
+          {occupying.length > 0 && (isWeld(e.type)
+            ? <div className="banner warn">{machine} has {one} <b>{occupying[0].tag}</b> on it now. Each welder holds one {one} — {occupying[0].tag} will be taken off and go back to spares.</div>
+            : <div className="banner warn">Already on {machine}: {occupying.map((x) => `${x.tag}${x.position ? ` (${x.position})` : ''}`).join(', ')}. Remove it first if this {one} replaces it.</div>)}
+          {kind === 'install' && isWeld(e.type) && occupying.length > 0 && <Field label={`Why is ${occupying[0].tag} coming off? (optional)`}><ReasonPicker value={reason} onChange={setReason} /></Field>}
         </>}
         {kind === 'remove' && (
           <Field label="Where is it going?">
@@ -552,6 +557,8 @@ function EquipmentForm({ type, item, onClose }: { type: EquipmentType; item?: Eq
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof Equipment>(k: K, v: Equipment[K] | null | undefined) => setD((x) => ({ ...x, [k]: v ?? undefined }));
   const dupTag = d.tag && Object.values(all).some((x) => x.id !== item?.id && x.type === type && x.tag.toLowerCase() === d.tag!.trim().toLowerCase());
+  const weldOccupant = isWeld(type) && d.status === 'installed' && d.machine && !(item?.status === 'installed' && item.machine === d.machine)
+    ? Object.values(all).find((x) => x.id !== item?.id && x.type === type && x.status === 'installed' && x.machine === d.machine) : undefined;
 
   const save = async () => {
     if (!d.tag?.trim()) { toast('Enter a tag / ID', 'danger'); return; }
@@ -595,6 +602,7 @@ function EquipmentForm({ type, item, onClose }: { type: EquipmentType; item?: Eq
           </>}
         </div>
         {dupTag && <div className="banner warn" style={{ marginTop: '1rem' }}>Another {one} already uses this tag.</div>}
+        {weldOccupant && <div className="banner warn" style={{ marginTop: '1rem' }}>{d.machine} has {one} <b>{weldOccupant.tag}</b> on it now. Each welder holds one {one} — saving takes {weldOccupant.tag} off and puts it back in spares.</div>}
         <div className="form-section">
           <h3>Where is it now?</h3>
           <Seg value={d.status || 'spare'} onChange={(v) => set('status', v)} options={[{ id: 'installed', label: `On a ${host}` }, { id: 'spare', label: 'Spare' }, { id: 'repair', label: 'In repair' }, { id: 'retired', label: 'Retired' }]} />

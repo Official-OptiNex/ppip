@@ -584,6 +584,9 @@ export class Store extends DurableObject<Env> {
       if (!doc.status) doc.status = doc.machine ? 'installed' : 'spare';
       if (doc.status === 'installed' && !doc.installedAt) doc.installedAt = now;
       syncHistory(doc as unknown as Equipment, now);
+      if (doc.status === 'installed' && doc.machine && (existing?.status !== 'installed' || existing?.machine !== doc.machine)) {
+        this.replaceOnWelder(u, doc as unknown as Equipment, String(doc.machine), now, '', '');
+      }
     }
     if (kind === 'downtime') {
       if (!String(doc.machine ?? '').trim()) throw new HttpError(400, 'Choose the machine.');
@@ -719,6 +722,26 @@ export class Store extends DurableObject<Env> {
     return p;
   }
 
+  /**
+   * Every sonic welder has exactly one horn and one anvil. Putting `e` on `welder` takes the horn/anvil
+   * that is on it now off (back to spares) and records why on its history.
+   */
+  replaceOnWelder(u: AuthUser | null, e: Equipment, welder: string, at: number, reason: string, note: string) {
+    if (e.type !== 'horn' && e.type !== 'anvil') return;
+    for (const o of this.allDocs<Equipment>('equipment')) {
+      if (o.id === e.id || o.type !== e.type || o.status !== 'installed' || o.machine !== welder) continue;
+      syncHistory(o, at);
+      const open = o.history?.find((h) => !h.removedAt);
+      const d = o.installedAt ? Math.max(0, Math.round((at - o.installedAt) / DAY)) : 0;
+      if (open) { open.removedAt = at; open.reason = reason || 'Replaced'; open.note = note || `Replaced by ${e.tag}`; }
+      o.status = 'spare'; o.machine = ''; o.position = ''; o.installedAt = null; o.lastServiceAt = null;
+      o.updatedAt = Date.now(); o.updatedBy = u?.name ?? 'System';
+      this.putDoc('equipment', o as unknown as Record<string, unknown>);
+      this.broadcast({ t: 'upsert', kind: 'equipment', doc: o });
+      this.log(u, 'remove', 'equipment', o.id, `${EQUIPMENT_LABEL[o.type].one} ${o.tag} taken off ${welder} after ${d} day${d === 1 ? '' : 's'} (${reason || 'replaced'}) — replaced by ${e.tag}`);
+    }
+  }
+
   equipmentAction(c: Ctx, id: string, b: Record<string, unknown>) {
     const u = this.need(c, 'editor');
     const e = this.getDoc<Equipment>('equipment', id);
@@ -737,6 +760,8 @@ export class Store extends DurableObject<Env> {
       case 'install':
         if (!b.machine) throw new HttpError(400, 'Choose a machine.');
         closeStint(reason);
+        // a welder holds one horn and one anvil: the one already on it comes off (the reason is for that one)
+        this.replaceOnWelder(u, e, String(b.machine), at, reason, note);
         e.status = 'installed'; e.machine = String(b.machine); e.position = e.type === 'knife' ? '' : String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
         openStint();
         summary = `${kindLabel} ${e.tag} installed on ${e.machine}${e.position ? ` (${e.position})` : ''}`;
@@ -745,6 +770,7 @@ export class Store extends DurableObject<Env> {
         if (!b.machine) throw new HttpError(400, 'Choose a machine.');
         const from = e.machine;
         closeStint(reason || 'Moved');
+        this.replaceOnWelder(u, e, String(b.machine), at, '', '');
         e.status = 'installed'; e.machine = String(b.machine); e.position = e.type === 'knife' ? '' : String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
         openStint();
         summary = `${kindLabel} ${e.tag} moved ${from ? `from ${from} ` : ''}to ${e.machine}`;
@@ -795,7 +821,7 @@ export class Store extends DurableObject<Env> {
       }
     });
     if ((o.items as Record<string, unknown>[]).every((it) => it.received)) o.status = 'received';
-    o.updatedAt = Date.now(); o.updatedBy = u.name;
+    o.updatedAt = Date.now(); o.updatedBy = u?.name ?? 'System';
     this.putDoc('orders', o);
     this.broadcast({ t: 'upsert', kind: 'orders', doc: o });
     this.log(u, 'receive', 'orders', id, `Received ${o.number} into stock (${n} part${n === 1 ? '' : 's'} restocked)`);
