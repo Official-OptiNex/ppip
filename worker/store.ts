@@ -2,7 +2,7 @@
 // Every change is broadcast to all connected screens over WebSockets so the app updates live.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  DEFAULT_SETTINGS, DOC_KINDS, FIELD_SPECS, ROLES, SEED_MANUFACTURERS, SEED_VENDORS, stockStatus,
+  DEFAULT_SETTINGS, DOC_KINDS, FIELD_SPECS, ROLES, SEED_MANUFACTURERS, SEED_VENDORS, stockStatus, EQUIPMENT_LABEL,
   type DocKind, type Equipment, type Machine, type Part, type PmLog, type PublicUser, type Role, type StockStatus, type UserPrefs,
 } from '../shared/types';
 import { demoData } from './demo';
@@ -571,7 +571,7 @@ export class Store extends DurableObject<Env> {
     const changes = clean(kind, patch);
     const doc: Record<string, unknown> = { ...(existing || {}), ...changes, id, updatedAt: now, updatedBy: u?.name ?? 'System', createdAt: existing?.createdAt ?? now };
 
-    if (kind !== 'settings' && kind !== 'orders' && kind !== 'equipment' && kind !== 'pms' && !String(doc.name ?? '').trim()) throw new HttpError(400, 'Name is required.');
+    if (kind !== 'settings' && kind !== 'orders' && kind !== 'equipment' && kind !== 'pms' && kind !== 'downtime' && kind !== 'cores' && !String(doc.name ?? '').trim()) throw new HttpError(400, 'Name is required.');
     if (kind === 'pms') {
       if (!String(doc.machine ?? '').trim()) throw new HttpError(400, 'Choose a machine.');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(doc.date ?? ''))) throw new HttpError(400, 'Enter the date the PM was done.');
@@ -580,9 +580,20 @@ export class Store extends DurableObject<Env> {
     }
     if (kind === 'equipment') {
       if (!doc.tag) throw new HttpError(400, 'Tag / ID is required.');
-      if (!['knife', 'roller'].includes(doc.type as string)) throw new HttpError(400, 'Type must be knife or roller.');
+      if (!['knife', 'roller', 'horn', 'anvil'].includes(doc.type as string)) throw new HttpError(400, 'Unknown item type.');
       if (!doc.status) doc.status = doc.machine ? 'installed' : 'spare';
       if (doc.status === 'installed' && !doc.installedAt) doc.installedAt = now;
+      syncHistory(doc as unknown as Equipment, now);
+    }
+    if (kind === 'downtime') {
+      if (!String(doc.machine ?? '').trim()) throw new HttpError(400, 'Choose the machine.');
+      if (!String(doc.problem ?? '').trim()) throw new HttpError(400, 'Describe what happened.');
+      if (!doc.startedAt) doc.startedAt = now;
+      if (doc.minutes != null && (doc.minutes as number) < 0) throw new HttpError(400, 'Minutes can’t be negative.');
+    }
+    if (kind === 'cores') {
+      if (!String(doc.tag ?? '').trim()) throw new HttpError(400, 'Enter the tag number.');
+      if (!doc.at) doc.at = now;
     }
     if (kind === 'orders') {
       if (!Array.isArray(doc.items)) doc.items = [];
@@ -619,11 +630,14 @@ export class Store extends DurableObject<Env> {
         if (l.doneBy === existing.name) { l.doneBy = doc.name as string; this.putDoc('pms', l as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'pms', doc: l }); }
       }
     }
-    if (existing && (kind === 'manufacturers' || kind === 'vendors' || kind === 'machines') && existing.name !== doc.name) {
+    if (existing && (kind === 'manufacturers' || kind === 'vendors' || kind === 'machines' || kind === 'welders') && existing.name !== doc.name) {
       this.cascadeRename(kind, existing.name as string, doc.name as string);
     }
     if (!opts.quiet && kind !== 'settings') {
-      const label = (kind === 'pms' ? `${doc.type === 'monthly' ? 'Monthly' : 'Weekly'} PM on ${doc.machine} (${doc.date})${doc.doneBy ? ` by ${doc.doneBy}` : ''}` : doc.name || doc.tag || doc.title || id) as string;
+      const label = (kind === 'pms' ? `${doc.type === 'monthly' ? 'Monthly' : 'Weekly'} PM on ${doc.machine} (${doc.date})${doc.doneBy ? ` by ${doc.doneBy}` : ''}`
+        : kind === 'downtime' ? `${doc.welder ? `${doc.welder} (${doc.machine})` : doc.machine}: ${String(doc.problem).slice(0, 80)}${doc.minutes ? ` — ${doc.minutes} min` : ''}`
+          : kind === 'cores' ? `tag ${doc.tag}${doc.machine ? ` on ${doc.machine}` : ''}`
+            : doc.name || doc.tag || doc.title || id) as string;
       const summary = existing ? `Updated ${singular(kind)} “${label}”` : `Added ${singular(kind)} “${label}”`;
       this.log(u, existing ? 'update' : 'create', kind, id, summary + (kind === 'orders' ? ` (${doc.number})` : ''));
     }
@@ -631,7 +645,7 @@ export class Store extends DurableObject<Env> {
     return doc;
   }
 
-  cascadeRename(kind: 'manufacturers' | 'vendors' | 'machines', from: string, to: string) {
+  cascadeRename(kind: 'manufacturers' | 'vendors' | 'machines' | 'welders', from: string, to: string) {
     const now = Date.now();
     for (const p of this.allDocs<Part>('parts')) {
       let changed = false;
@@ -646,6 +660,24 @@ export class Store extends DurableObject<Env> {
       }
       for (const l of this.allDocs<PmLog>('pms')) {
         if (l.machine === from) { l.machine = to; l.updatedAt = now; this.putDoc('pms', l as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'pms', doc: l }); }
+      }
+      for (const k of ['downtime', 'cores', 'welders'] as const) {
+        for (const d of this.allDocs<{ id: string; machine?: string; updatedAt?: number }>(k)) {
+          if (d.machine === from) { d.machine = to; d.updatedAt = now; this.putDoc(k, d as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: k, doc: d }); }
+        }
+      }
+    }
+    if (kind === 'welders') {
+      // horns & anvils are "installed on" a welder; downtime can name a welder
+      for (const e of this.allDocs<Equipment>('equipment')) {
+        if ((e.type === 'horn' || e.type === 'anvil') && (e.machine === from || e.history?.some((h) => h.machine === from))) {
+          if (e.machine === from) e.machine = to;
+          e.history = e.history?.map((h) => (h.machine === from ? { ...h, machine: to } : h));
+          e.updatedAt = now; this.putDoc('equipment', e as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'equipment', doc: e });
+        }
+      }
+      for (const d of this.allDocs<{ id: string; welder?: string; updatedAt?: number }>('downtime')) {
+        if (d.welder === from) { d.welder = to; d.updatedAt = now; this.putDoc('downtime', d as unknown as Record<string, unknown>); this.broadcast({ t: 'upsert', kind: 'downtime', doc: d }); }
       }
     }
   }
@@ -693,26 +725,36 @@ export class Store extends DurableObject<Env> {
     if (!e) throw new HttpError(404, 'Item not found.');
     const at = Number(b.at) || Date.now();
     const action = String(b.action);
-    const kindLabel = e.type === 'knife' ? 'Hot knife' : 'Roller';
+    const kindLabel = EQUIPMENT_LABEL[e.type]?.one || 'Item';
+    const reason = String(b.reason || '').slice(0, 60);
+    const note = String(b.note || '').slice(0, 500);
+    syncHistory(e, at); // make sure the current stretch on a machine is on record
+    const closeStint = (why: string) => { const open = e.history?.find((h) => !h.removedAt); if (open) { open.removedAt = at; open.reason = why || open.reason; if (note) open.note = note; } };
+    const openStint = () => { e.history = [...(e.history || []), { machine: e.machine!, position: e.position || '', installedAt: at }]; };
     const days = (t?: number | null) => (t ? Math.max(0, Math.round((at - t) / DAY)) : 0);
     let summary = '';
     switch (action) {
       case 'install':
         if (!b.machine) throw new HttpError(400, 'Choose a machine.');
+        closeStint(reason);
         e.status = 'installed'; e.machine = String(b.machine); e.position = e.type === 'knife' ? '' : String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
+        openStint();
         summary = `${kindLabel} ${e.tag} installed on ${e.machine}${e.position ? ` (${e.position})` : ''}`;
         break;
       case 'move': {
         if (!b.machine) throw new HttpError(400, 'Choose a machine.');
         const from = e.machine;
+        closeStint(reason || 'Moved');
         e.status = 'installed'; e.machine = String(b.machine); e.position = e.type === 'knife' ? '' : String(b.position || ''); e.installedAt = at; e.lastServiceAt = null;
+        openStint();
         summary = `${kindLabel} ${e.tag} moved ${from ? `from ${from} ` : ''}to ${e.machine}`;
         break;
       }
       case 'remove': {
         const from = e.machine; const d = days(e.installedAt);
+        closeStint(reason);
         e.status = b.to === 'repair' ? 'repair' : 'spare'; e.machine = ''; e.position = ''; e.installedAt = null; e.lastServiceAt = null;
-        summary = `${kindLabel} ${e.tag} removed from ${from || 'machine'} after ${d} day${d === 1 ? '' : 's'} → ${e.status === 'repair' ? 'repair / rebuild' : 'spares'}`;
+        summary = `${kindLabel} ${e.tag} removed from ${from || 'machine'} after ${d} day${d === 1 ? '' : 's'}${reason ? ` (${reason})` : ''} → ${e.status === 'repair' ? 'repair / rebuild' : 'spares'}`;
         break;
       }
       case 'service':
@@ -720,8 +762,9 @@ export class Store extends DurableObject<Env> {
         summary = `${kindLabel} ${e.tag} serviced / checked${e.machine ? ` on ${e.machine}` : ''}`;
         break;
       case 'retire':
+        closeStint(reason);
         e.status = 'retired'; e.machine = ''; e.position = ''; e.installedAt = null;
-        summary = `${kindLabel} ${e.tag} retired / scrapped`;
+        summary = `${kindLabel} ${e.tag} retired / scrapped${reason ? ` (${reason})` : ''}`;
         break;
       case 'spare':
         e.status = 'spare';
@@ -729,7 +772,7 @@ export class Store extends DurableObject<Env> {
         break;
       default: throw new HttpError(400, 'Unknown action.');
     }
-    if (b.note) summary += ` — ${String(b.note).slice(0, 500)}`;
+    if (note) summary += ` — ${note}`;
     e.updatedAt = Date.now(); e.updatedBy = u.name;
     this.putDoc('equipment', e as unknown as Record<string, unknown>);
     this.broadcast({ t: 'upsert', kind: 'equipment', doc: e });
@@ -1203,6 +1246,21 @@ export class Store extends DurableObject<Env> {
 }
 
 const BADGE_RULE = 'Enter the badge ID exactly as it is on the badge (letters, numbers and symbols like 7A:018 are fine).';
+/**
+ * Keep the install → pull history in step with the item's current state:
+ * an installed item always has one open stretch for its machine; anything else has none open.
+ */
+function syncHistory(e: Equipment, now: number) {
+  const h = Array.isArray(e.history) ? e.history.filter((x) => x && x.machine && x.installedAt) : [];
+  const open = h.find((x) => !x.removedAt);
+  if (e.status === 'installed' && e.machine) {
+    if (!open) h.push({ machine: e.machine, position: e.position || '', installedAt: e.installedAt || now });
+    else { open.machine = e.machine; open.position = e.position || ''; if (e.installedAt) open.installedAt = e.installedAt; }
+  } else if (open) open.removedAt = now;
+  h.sort((a, b) => a.installedAt - b.installedAt);
+  e.history = h;
+}
+
 /** Badge IDs can contain any letters, numbers and symbols (e.g. "7a:018"). Only surrounding spaces and invisible control characters are dropped. */
 function normBadge(raw: string): string | null {
   const b = String(raw).replace(/[\u0000-\u001f\u007f]/g, '').trim();
@@ -1210,5 +1268,5 @@ function normBadge(raw: string): string | null {
 }
 
 function singular(kind: string) {
-  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide', pms: 'PM', mechanics: 'mechanic' } as Record<string, string>)[kind] || kind;
+  return ({ parts: 'part', manufacturers: 'manufacturer', vendors: 'supplier', machines: 'machine', equipment: 'item', orders: 'order guide', pms: 'PM', mechanics: 'mechanic', welders: 'sonic welder', downtime: 'downtime entry', cores: 'crushed core' } as Record<string, string>)[kind] || kind;
 }

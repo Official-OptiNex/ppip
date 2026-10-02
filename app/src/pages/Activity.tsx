@@ -7,7 +7,7 @@ import { fmtDateTime, useDebounced } from '../lib/util';
 import { SearchInput, Spinner, Empty } from '../components/ui';
 import type { Activity } from '../../../shared/types';
 
-const KINDS: [string, string][] = [['', 'Everything'], ['parts', 'Parts & stock'], ['equipment', 'Knives & rollers'], ['orders', 'Order guides'], ['users', 'Accounts'], ['vendors', 'Suppliers'], ['machines', 'Machines']];
+const KINDS: [string, string][] = [['', 'Everything'], ['parts', 'Parts & stock'], ['equipment', 'Knives, rollers, horns, anvils'], ['downtime', 'Downtime'], ['cores', 'Crushed cores'], ['welders', 'Sonic welders'], ['orders', 'Order guides'], ['users', 'Accounts'], ['vendors', 'Suppliers'], ['machines', 'Machines']];
 
 export function ActivityPage() {
   const [q, setQ] = useState('');

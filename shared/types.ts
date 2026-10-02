@@ -101,7 +101,25 @@ export interface PmLog extends BaseDoc {
   notes?: string;
 }
 
-export type EquipmentType = 'knife' | 'roller';
+export type EquipmentType = 'knife' | 'roller' | 'horn' | 'anvil';
+export const EQUIPMENT_LABEL: Record<EquipmentType, { one: string; many: string; route: string }> = {
+  knife: { one: 'Hot knife', many: 'Hot Knives', route: 'knives' },
+  roller: { one: 'Roller', many: 'Rollers', route: 'rollers' },
+  horn: { one: 'Horn', many: 'Horns', route: 'welders/horns' },
+  anvil: { one: 'Anvil', many: 'Anvils', route: 'welders/anvils' },
+};
+/** Optional reasons when something is pulled off a machine. */
+export const REMOVAL_REASONS = ['Wear', 'Damage', 'Changeover', 'Repair / rebuild', 'Other'];
+
+/** One stretch on a machine: installed → pulled. */
+export interface Stint {
+  machine: string;
+  position?: string;
+  installedAt: number;
+  removedAt?: number | null;
+  reason?: string; // why it was pulled (optional)
+  note?: string;
+}
 export type EquipmentStatus = 'installed' | 'spare' | 'repair' | 'retired';
 
 export interface Equipment extends BaseDoc {
@@ -124,6 +142,8 @@ export interface Equipment extends BaseDoc {
   diameter?: number; // outer diameter, inches
   length?: number; // roller length, inches
   covering?: string; // no longer used (all rollers are rubber)
+  partNumber?: string; // horns & anvils
+  history?: Stint[]; // every install → pull, newest last
 }
 
 export interface OrderItem {
@@ -194,6 +214,37 @@ export interface Settings extends BaseDoc {
   shifts?: string[]; // shift names mechanics can be assigned to
 }
 
+/** An ultrasonic (sonic) welder; horns & anvils are installed on it. */
+export interface Welder extends BaseDoc {
+  name: string;
+  machine?: string; // which line / bag machine it's on
+  model?: string;
+  notes?: string;
+}
+
+export const DOWNTIME_CATEGORIES = ['Sealing', 'Hot knife', 'Rollers / nip', 'Sonic welder', 'Electrical', 'Mechanical', 'Film / material', 'Air / pneumatics', 'Changeover', 'Other'];
+/** A glitch / stoppage that caused downtime on a machine (or a sonic welder). */
+export interface Downtime extends BaseDoc {
+  machine: string;
+  welder?: string;
+  startedAt: number;
+  minutes?: number;
+  category?: string;
+  problem: string;
+  fix?: string;
+  bpm?: number; // speed it happened at (bags per minute)
+  reportedBy?: string;
+}
+
+/** A crushed core log entry. */
+export interface CrushedCore extends BaseDoc {
+  at: number;
+  tag: string;
+  machine?: string;
+  notes?: string;
+  reportedBy?: string;
+}
+
 export interface DocMap {
   parts: Part;
   manufacturers: Manufacturer;
@@ -203,10 +254,13 @@ export interface DocMap {
   orders: OrderGuide;
   pms: PmLog;
   mechanics: Mechanic;
+  welders: Welder;
+  downtime: Downtime;
+  cores: CrushedCore;
   settings: Settings;
 }
 export type DocKind = keyof DocMap;
-export const DOC_KINDS: DocKind[] = ['parts', 'manufacturers', 'vendors', 'machines', 'equipment', 'orders', 'pms', 'mechanics', 'settings'];
+export const DOC_KINDS: DocKind[] = ['parts', 'manufacturers', 'vendors', 'machines', 'equipment', 'orders', 'pms', 'mechanics', 'welders', 'downtime', 'cores', 'settings'];
 
 export interface Movement {
   id: string;
@@ -259,11 +313,14 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   },
   machines: { name: 'str', area: 'str', notes: 'text', pmTracked: 'bool', pmWeeklyDays: 'num', pmMonthlyMonths: 'num' },
   mechanics: { name: 'str', shift: 'str', phone: 'str', notes: 'text', inactive: 'bool' },
+  welders: { name: 'str', machine: 'str', model: 'str', notes: 'text' },
+  downtime: { machine: 'str', welder: 'str', startedAt: 'time', minutes: 'num', category: 'str', problem: 'text', fix: 'text', bpm: 'num', reportedBy: 'str' },
+  cores: { at: 'time', tag: 'str', machine: 'str', notes: 'text', reportedBy: 'str' },
   pms: { machine: 'str', date: 'str', type: 'str', doneBy: 'str', nextDue: 'str', notes: 'text' },
   equipment: {
     type: 'str', tag: 'str', status: 'str', machine: 'str', position: 'str', installedAt: 'time', lastServiceAt: 'time', pmDays: 'num',
     notes: 'text', tipType: 'str', bagSize: 'str', bagInches: 'num', construction: 'str', rollerType: 'str', diameter: 'num',
-    length: 'num', covering: 'str',
+    length: 'num', covering: 'str', partNumber: 'str', history: 'json',
   },
   orders: {
     number: 'str', title: 'str', requestedBy: 'str', department: 'str', machine: 'str', dateNeeded: 'str', priority: 'str',

@@ -30,7 +30,7 @@ export interface State {
   undoBar: { id: string; summary: string; at: number } | null;
 }
 
-const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {}, pms: {}, mechanics: {} });
+const emptyDocs = (): Docs => ({ parts: {}, manufacturers: {}, vendors: {}, machines: {}, equipment: {}, orders: {}, pms: {}, mechanics: {}, welders: {}, downtime: {}, cores: {} });
 
 let state: State = {
   phase: 'boot', me: null, users: [], settings: DEFAULT_SETTINGS, docs: emptyDocs(), notifications: [], notifSeen: 0, activity: [],

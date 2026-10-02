@@ -1,5 +1,5 @@
 // Sample data so the app can be tried out before real parts are entered (Admin → System → Load demo data).
-import type { DocKind, Equipment, Machine, Part, PmLog, Vendor } from '../shared/types';
+import { REMOVAL_REASONS, type CrushedCore, type DocKind, type Downtime, type Equipment, type Machine, type Part, type PmLog, type Stint, type Vendor, type Welder } from '../shared/types';
 import { addDays, addMonths, fmtDay } from '../shared/pm';
 
 const DAY = 86_400_000;
@@ -105,6 +105,69 @@ export function demoData() {
     });
   }
 
+  // past install → pull history (most pulled for wear)
+  const pastStints = (e: Equipment, hosts: string[], life: [number, number]) => {
+    const h: Stint[] = [];
+    let end = (e.status === 'installed' ? e.installedAt! : now - Math.floor(rnd() * 20 + 1) * DAY) - DAY;
+    const n = 2 + Math.floor(rnd() * 3);
+    for (let k = 0; k < n; k++) {
+      const len = Math.floor(life[0] + rnd() * (life[1] - life[0]));
+      const start = end - len * DAY;
+      h.unshift({ machine: pick(hosts), installedAt: start, removedAt: end, reason: rnd() < 0.65 ? 'Wear' : rnd() < 0.5 ? pick(REMOVAL_REASONS) : '' });
+      end = start - Math.floor(rnd() * 15 + 1) * DAY;
+    }
+    if (e.status === 'installed') h.push({ machine: e.machine!, position: e.position || '', installedAt: e.installedAt! });
+    e.history = h;
+  };
+  for (const e of equipment) pastStints(e, machines.slice(0, e.type === 'knife' ? 4 : 6).map((m) => m.name), e.type === 'knife' ? [12, 60] : [90, 300]);
+
+  // sonic welders, their horns & anvils
+  const welders: Welder[] = [
+    { id: 'demo-w1', name: 'Welder 1', machine: 'Bag Machine 1', model: 'Branson 2000X 20 kHz' },
+    { id: 'demo-w2', name: 'Welder 2', machine: 'Bag Machine 3', model: 'Branson 2000X 20 kHz' },
+    { id: 'demo-w3', name: 'Welder 3', machine: 'Bag Machine 4', model: 'Herrmann HiQ 35 kHz' },
+  ];
+  for (const type of ['horn', 'anvil'] as const) {
+    for (let i = 0; i < 5; i++) {
+      const installed = i < 3;
+      const e: Equipment = {
+        id: `demo-${type}${i}`, type, tag: `${type === 'horn' ? 'H' : 'A'}-${String(11 + i)}`, status: installed ? 'installed' : i === 3 ? 'spare' : 'repair',
+        machine: installed ? welders[i].name : '', installedAt: installed ? now - Math.floor(rnd() * 60 + 3) * DAY : null,
+        partNumber: type === 'horn' ? `HRN-${2040 + i}` : `ANV-${310 + i}`,
+      };
+      pastStints(e, welders.map((w) => w.name), type === 'horn' ? [60, 200] : [30, 120]);
+      equipment.push(e);
+    }
+  }
+
+  // ~2 months of downtime / glitches
+  const problems: Record<string, [string, string][]> = {
+    Sealing: [['Seal not holding on left side', 'Raised seal temp 10°'], ['Wrinkled seals', 'Re-shimmed seal bar']],
+    'Hot knife': [['Knife not cutting through', 'Swapped hot knife'], ['Knife cycling slow', 'Cleaned contacts']],
+    'Rollers / nip': [['Film tracking off the nip', 'Adjusted nip pressure'], ['Roller slipping', 'Cleaned roller face']],
+    'Sonic welder': [['Weak welds, bags opening', 'Raised amplitude to 80%'], ['Overload fault on welder', 'Re-torqued horn, reset'], ['Anvil marks on film', 'Cleaned anvil']],
+    Electrical: [['Photo-eye missing registration', 'Cleaned and re-taught eye'], ['Drive fault', 'Reset VFD']],
+    Mechanical: [['Bag stacker jam', 'Cleared jam, adjusted guides'], ['Belt slipping', 'Tensioned belt']],
+    'Film / material': [['Roll splice broke', 'Re-spliced'], ['Gauge bands in film', 'Called extrusion']],
+  };
+  const downtime: Downtime[] = [];
+  for (let i = 0; i < 46; i++) {
+    const cat = pick(Object.keys(problems));
+    const [problem, fix] = pick(problems[cat]);
+    const w = cat === 'Sonic welder' ? pick(welders) : null;
+    downtime.push({
+      id: `demo-dt${i}`, machine: w ? w.machine! : pick(machines.slice(0, 6)).name, welder: w?.name, category: cat, problem, fix,
+      startedAt: now - Math.floor(rnd() * 60 * DAY) - 3600000, minutes: pick([5, 10, 10, 15, 20, 30, 45, 60, 90]),
+      bpm: w || rnd() < 0.3 ? pick([90, 100, 110, 120, 130]) : undefined, reportedBy: pick(people),
+    });
+  }
+
+  // crushed cores
+  const cores: CrushedCore[] = [];
+  for (let i = 0; i < 24; i++) {
+    cores.push({ id: `demo-cc${i}`, tag: String(448100 + Math.floor(rnd() * 900)), at: now - Math.floor(rnd() * 45 * DAY), machine: rnd() < 0.7 ? pick(machines.slice(4, 8)).name : '', notes: rnd() < 0.3 ? pick(['Forklift damage', 'Crushed in storage', 'Dropped off rack']) : '', reportedBy: pick(people) });
+  }
+
   // ~10 months of usage history
   const movements: { partId: string; partName: string; delta: number; qtyAfter: number; kind: string; machine: string; userName: string; unitCost: number; at: number }[] = [];
   for (const p of parts.filter((x) => !x.decommissioned)) {
@@ -125,7 +188,7 @@ export function demoData() {
   }
 
   return {
-    docs: { machines, vendors, parts, equipment, pms, mechanics } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
+    docs: { machines, vendors, parts, equipment, pms, mechanics, welders, downtime, cores } as unknown as Partial<Record<DocKind, Record<string, unknown>[]>>,
     movements,
   };
 }
