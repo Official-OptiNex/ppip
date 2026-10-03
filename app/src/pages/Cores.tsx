@@ -4,7 +4,7 @@ import type { CrushedCore } from '../../../shared/types';
 import { deleteDoc, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { download, fmtDateTime, matches, setQuery, toCSV, todayISO, uniqueSorted } from '../lib/util';
 import { HBarList } from '../components/Charts';
-import { Combobox, Empty, Field, Modal, SearchInput, confirmDialog } from '../components/ui';
+import { Combobox, Empty, Field, Modal, SearchInput, confirmDialog, Person } from '../components/ui';
 import { t } from '../lib/i18n';
 import { PERIODS, fromLocalInput, startOfMonth, startOfToday, startOfWeek, toLocalInput, useMachineNames } from './Downtime';
 
@@ -82,7 +82,7 @@ export function CoresPage({ query }: { query: URLSearchParams }) {
                     <td className="nowrap">{fmtDateTime(c.at)}</td>
                     <td><b className="mono" style={{ fontSize: '1.05rem' }}>{c.tag}</b></td>
                     <td>{c.machine || <span className="muted">—</span>}</td>
-                    <td>{c.notes || <span className="muted">—</span>}{c.reportedBy && <div className="small muted">{c.reportedBy}</div>}</td>
+                    <td>{c.notes || <span className="muted">—</span>}{c.reportedBy && <div className="small muted"><Person name={c.reportedBy} size={18} /></div>}</td>
                     {canEdit && <td onClick={(ev) => ev.stopPropagation()}><div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
                       <button className="btn sm icon" onClick={() => setEditing(c)} aria-label={t('Edit')} title={t('Edit')}><Pencil size={17} /></button>
                       <button className="btn sm icon danger-ghost" onClick={() => remove(c)} aria-label={t('Delete')} title={t('Delete')}><Trash2 size={17} /></button>

@@ -5,7 +5,7 @@ import type { ShiftNote } from '../../../shared/types';
 import { deleteDoc, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { fmtDateTime, matches, setQuery, timeAgo } from '../lib/util';
 import { safeGet, safeSet } from '../lib/api';
-import { Avatar, Combobox, Empty, Field, Modal, SearchInput, Seg, confirmDialog } from '../components/ui';
+import { UserAvatar, Person, Combobox, Empty, Field, Modal, SearchInput, Seg, confirmDialog } from '../components/ui';
 import { t } from '../lib/i18n';
 import { startOfToday, useMachineNames } from './Downtime';
 
@@ -119,7 +119,7 @@ function NoteCard({ n, canEdit, onEdit }: { n: ShiftNote; canEdit: boolean; onEd
   return (
     <div className={`card card-pad note-card ${open ? 'note-open' : ''}`} data-testid="note">
       <div className="row" style={{ gap: '0.7rem', alignItems: 'flex-start' }}>
-        <Avatar name={n.author || '?'} />
+        <UserAvatar name={n.author} />
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="row wrap" style={{ gap: '0.4rem' }}>
             <b>{n.author || t('Someone')}</b>
@@ -127,7 +127,7 @@ function NoteCard({ n, canEdit, onEdit }: { n: ShiftNote; canEdit: boolean; onEd
             {n.machine && <span className="pill neutral">{n.machine}</span>}
             {n.shift && <span className="pill info">{n.shift}</span>}
             {open && <span className="pill warn"><Flag size={14} />{t('Needs follow-up')}</span>}
-            {n.followUp && n.done && <span className="pill ok"><CheckCircle2 size={14} />{t('Done')}{n.doneBy ? ` · ${n.doneBy}` : ''}</span>}
+            {n.followUp && n.done && <span className="pill ok"><CheckCircle2 size={14} />{t('Done')}{n.doneBy && <> · <Person name={n.doneBy} size={18} /></>}</span>}
           </div>
           <div className="note-text">{n.text}</div>
         </div>

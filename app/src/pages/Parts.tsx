@@ -10,7 +10,7 @@ import {
   stockStatus, matches, uniqueSorted, money, navigate, setQuery, timeAgo, fmtDateTime, partValue, reorderQty, STATUS_LABEL, download, toCSV, useDebounced,
 } from '../lib/util';
 import { needsReorder } from '../../../shared/types';
-import { Drawer, Empty, Menu, SearchInput, StatusPill, Thumb, confirmDialog, Spinner } from '../components/ui';
+import { Drawer, Empty, Menu, SearchInput, StatusPill, Thumb, confirmDialog, Spinner, Person } from '../components/ui';
 import { PartForm, StockDialog, type StockMode } from '../components/PartDialogs';
 import { plural, t } from '../lib/i18n';
 import { rich } from '../components/ui';
@@ -387,7 +387,7 @@ function PartDrawer({ part: p, onClose, onEdit, onStock, onCopy }: { part: Part;
                     <span className={`li-icon ${m.delta < 0 ? 'warn' : 'ok'}`}>{m.delta < 0 ? <PackageMinus size={18} /> : <PackagePlus size={18} />}</span>
                     <div className="grow">
                       <div><b>{t(m.kind === 'use' ? 'Took' : m.kind === 'receive' ? 'Received' : m.kind === 'create' ? 'Starting stock' : 'Count adjusted')}</b> {m.delta > 0 ? '+' : ''}{m.delta} → {m.qtyAfter}{m.machine && <span className="muted"> · {m.machine}</span>}</div>
-                      <div className="small muted">{fmtDateTime(m.at)} · {m.userName}{m.note ? ` · ${m.note}` : ''}</div>
+                      <div className="small muted">{fmtDateTime(m.at)} · <Person name={m.userName} size={18} />{m.note ? ` · ${m.note}` : ''}</div>
                     </div>
                   </div>
                 ))}

@@ -4,7 +4,7 @@ import { EQUIPMENT_LABEL, REMOVAL_REASONS, type Activity, type Equipment, type E
 import { api } from '../lib/api';
 import { applyUpsert, deleteDoc, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { fmtDate, fmtDuration, matches, pmState, setQuery, todayISO, uniqueSorted, fmtDateTime, download, toCSV, type PmState } from '../lib/util';
-import { Combobox, Drawer, Empty, Field, Menu, Modal, NumberInput, SearchInput, Seg, confirmDialog, Spinner } from '../components/ui';
+import { Combobox, Drawer, Empty, Field, Menu, Modal, NumberInput, SearchInput, Seg, confirmDialog, Spinner, UserAvatar } from '../components/ui';
 import { HBarList } from '../components/Charts';
 import { plural, t } from '../lib/i18n';
 import { rich } from '../components/ui';
@@ -493,7 +493,7 @@ function EquipmentDrawer({ e, onClose, onAction, onEdit }: { e: Equipment; onClo
           <h3 style={{ marginBottom: '0.6rem' }}><History size={18} style={{ verticalAlign: -3 }} /> {t('Activity')}</h3>
           <div className="card">
             {!hist ? <div className="card-pad center"><Spinner /></div> : hist.length === 0 ? <div className="empty small">{t('No activity yet.')}</div> : (
-              <div className="list">{hist.map((h) => <div key={h.id} className="list-item"><div className="grow"><div>{h.summary}</div><div className="small muted">{fmtDateTime(h.at)} · {h.userName}</div></div></div>)}</div>
+              <div className="list">{hist.map((h) => <div key={h.id} className="list-item"><UserAvatar name={h.userName} size={30} /><div className="grow"><div>{h.summary}</div><div className="small muted">{fmtDateTime(h.at)} · {h.userName}</div></div></div>)}</div>
             )}
           </div>
         </div>

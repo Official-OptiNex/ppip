@@ -163,6 +163,18 @@ export class Store extends DurableObject<Env> {
       }
       this.sql.exec(`INSERT OR REPLACE INTO meta (key,value) VALUES ('seedVersion','2')`);
     }
+    // seed v3: app renamed to "Process Technician" — update the old default names if nobody changed them
+    if (seedV < 3) {
+      const s = this.getDoc<Record<string, unknown>>('settings', 'app');
+      if (s) {
+        const pt = (s.printTemplate || null) as Record<string, unknown> | null;
+        const next = { ...s };
+        if (s.department === 'Process Engineering / Maintenance') next.department = 'Process Technician / Maintenance';
+        if (pt && pt.subtitle === 'Maintenance / Process Engineering') next.printTemplate = { ...pt, subtitle: 'Maintenance / Process Technician' };
+        this.putDoc('settings', next);
+      }
+      this.sql.exec(`INSERT OR REPLACE INTO meta (key,value) VALUES ('seedVersion','3')`);
+    }
   }
 
   // ------------------------------------------------------------------ helpers

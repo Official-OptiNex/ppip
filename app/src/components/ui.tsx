@@ -269,6 +269,24 @@ export function rich(en: string, vars?: Record<string, string | number>): ReactN
 export function tx(v: ReactNode): ReactNode { return typeof v === 'string' ? tr(v) : v; }
 
 /** Round profile picture, or coloured initials when there is no photo. */
+/** Profile picture of whoever has this name (activity, notes, "done by"…); initials when there is none. */
+export function useUserImage(name?: string | null) {
+  const me = useStore((s) => s.me);
+  const users = useStore((s) => s.users);
+  const key = (name || '').trim().toLowerCase();
+  if (!key) return null;
+  if (me && me.name.toLowerCase() === key) return me.avatar || null;
+  return users.find((u) => u.name.toLowerCase() === key)?.avatar || null;
+}
+export function UserAvatar({ name, size }: { name?: string | null; size?: number }) {
+  const image = useUserImage(name);
+  return <Avatar name={name || '?'} image={image} size={size} />;
+}
+/** Small picture + name, inline in a sentence or table cell. */
+export function Person({ name, size = 22 }: { name?: string | null; size?: number }) {
+  if (!name) return null;
+  return <span className="person"><UserAvatar name={name} size={size} /><span>{name}</span></span>;
+}
 export function Avatar({ name, image, size }: { name: string; image?: string | null; size?: number }) {
   const [err, setErr] = useState(false);
   const style = size ? { width: size, height: size, fontSize: size * 0.36 } : undefined;

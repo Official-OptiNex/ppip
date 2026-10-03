@@ -751,3 +751,13 @@ a.today-chip:hover { transform: translateY(-1px); box-shadow: var(--shadow); tex
   .qa-ic { flex: none; }
 }
 @media (max-width: 480px) { .topbar .clock { display: none; } }
+
+/* ---------- install app */
+.install-btn { justify-content: flex-start; color: var(--primary); font-weight: 700; margin-bottom: 0.3rem; }
+.install-steps { margin: 0; padding-left: 1.4rem; font-size: 1.12rem; line-height: 1.6; }
+.install-steps li { margin-bottom: 0.4rem; }
+
+/* ---------- people (picture + name) */
+.person { display: inline-flex; align-items: center; gap: 0.35rem; vertical-align: middle; max-width: 100%; }
+.person > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person .avatar, .list-item > .avatar, .row > .avatar { margin-left: 0; border-width: 0; }

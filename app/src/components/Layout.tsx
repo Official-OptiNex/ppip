@@ -15,6 +15,7 @@ import { Logo, APP_NAME } from './Logo';
 import { EQUIPMENT_LABEL } from '../../../shared/types';
 import { BadgeNotice } from './BadgeSetup';
 import { AnnouncementBar } from './Announcements';
+import { InstallApp } from './InstallApp';
 import type { Part, Equipment, OrderGuide } from '../../../shared/types';
 
 type NavItem = { to: string; label: string; icon: ReactNode; admin?: boolean };
@@ -103,6 +104,7 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
           {NAV_FOOT.filter((n) => !n.admin || me?.role === 'admin').map((n) => navLink(n))}
         </nav>
         <div className="sidebar-foot">
+          <InstallApp />
           <a className="btn block ghost" href="#/profile" style={{ justifyContent: 'flex-start' }}>
             <Avatar name={me?.name || ''} image={me?.avatar} />
             <span className="grow ellipsis" style={{ textAlign: 'left' }}>{me?.name}<br /><span className="small muted">{t(roleName(me?.role))}</span></span>

@@ -7,7 +7,7 @@ import { deleteDoc, newId, saveDoc, toast, toastError, useStore } from '../lib/s
 import { safeGet, safeSet } from '../lib/api';
 import { fmtDateTime, useNow } from '../lib/util';
 import { getLang, t } from '../lib/i18n';
-import { Empty, Field, Modal, confirmDialog } from './ui';
+import { Empty, Field, Modal, confirmDialog, Person } from './ui';
 import { fromLocalInput, toLocalInput } from '../pages/Downtime';
 
 type Level = NonNullable<Announcement['level']>;
@@ -101,7 +101,7 @@ export function AnnouncementPopup() {
         <div>
           <h2 style={{ fontSize: '1.5rem' }}>{title}</h2>
           {body && <p style={{ whiteSpace: 'pre-wrap', fontSize: '1.15rem', margin: '0.5rem 0 0' }}>{body}</p>}
-          <div className="small muted" style={{ marginTop: '0.8rem' }}>{a.author ? `${a.author} · ` : ''}{fmtDateTime(a.updatedAt || a.createdAt)}</div>
+          <div className="small muted" style={{ marginTop: '0.8rem' }}>{a.author && <><Person name={a.author} size={20} /> · </>}{fmtDateTime(a.updatedAt || a.createdAt)}</div>
         </div>
       </div>
     </Modal>
@@ -161,7 +161,7 @@ export function AnnouncementsAdmin() {
                     {a.popup && <span className="pill neutral">{t('Pop-up')}</span>}
                     {a.showOnLogin && <span className="pill neutral">{t('Sign-in screen')}</span>}
                   </div>
-                  <span className="small muted">{a.author ? `${a.author} · ` : ''}{fmtDateTime(a.updatedAt)}{a.endsAt ? ` · ${t('until {date}', { date: fmtDateTime(a.endsAt) })}` : ''}{a.startsAt && a.startsAt > now ? ` · ${t('from {date}', { date: fmtDateTime(a.startsAt) })}` : ''}</span>
+                  <span className="small muted">{a.author && <><Person name={a.author} size={20} /> · </>}{fmtDateTime(a.updatedAt)}{a.endsAt ? ` · ${t('until {date}', { date: fmtDateTime(a.endsAt) })}` : ''}{a.startsAt && a.startsAt > now ? ` · ${t('from {date}', { date: fmtDateTime(a.startsAt) })}` : ''}</span>
                 </div>
                 <AnnouncementBanner a={a} />
                 <div className="btn-group">

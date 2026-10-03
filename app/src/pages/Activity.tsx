@@ -4,7 +4,7 @@ import { useCanEdit, useIsAdmin, useStore } from '../lib/store';
 import { runUndo } from '../components/UndoBar';
 import { Undo2, Redo2 } from 'lucide-react';
 import { fmtDateTime, useDebounced } from '../lib/util';
-import { SearchInput, Spinner, Empty } from '../components/ui';
+import { SearchInput, Spinner, Empty, UserAvatar } from '../components/ui';
 import { EQUIPMENT_LABEL, type Activity } from '../../../shared/types';
 import { t } from '../lib/i18n';
 import { rich } from '../components/ui';
@@ -56,7 +56,7 @@ export function ActivityPage() {
                 <button className="btn sm" onClick={async (e) => { e.preventDefault(); e.stopPropagation(); if (await runUndo(a.undoId!, a.summary)) setTimeout(() => load().catch(() => {}), 400); }}
                   title={isRedo ? t('Redo this') : t('Undo this change')}>{isRedo ? <Redo2 size={16} /> : <Undo2 size={16} />}{isRedo ? t('Redo') : t('Undo')}</button>
               ) : a.undone ? <span className="pill neutral">{isRedo ? t('Redone') : t('Undone')}</span> : null;
-              const body = <><div className="grow"><div>{a.summary}</div><div className="small muted">{a.userName}</div></div><div className="small muted nowrap">{fmtDateTime(a.at)}</div>{undoBtn}</>;
+              const body = <><UserAvatar name={a.userName} /><div className="grow" style={{ minWidth: 0 }}><div>{a.summary}</div><div className="small muted">{a.userName}</div></div><div className="small muted nowrap">{fmtDateTime(a.at)}</div>{undoBtn}</>;
               return link ? <a key={a.id} className="list-item" href={link}>{body}</a> : <div key={a.id} className="list-item">{body}</div>;
             })}
           </div>

@@ -7,7 +7,7 @@ import { pmDueCount, usePmStates, useToday } from '../lib/pmhooks';
 import { useShifts } from './Mechanics';
 import type { Mechanic } from '../../../shared/types';
 import { download, matches, navigate, setQuery, toCSV, uniqueSorted } from '../lib/util';
-import { Combobox, Empty, Field, Modal, NumberInput, SearchInput, Seg, Tabs, confirmDialog, rich } from '../components/ui';
+import { Combobox, Empty, Field, Modal, NumberInput, SearchInput, Seg, Tabs, confirmDialog, rich, Person } from '../components/ui';
 import { locale, plural, t } from '../lib/i18n';
 import { tmap } from '../lib/util';
 
@@ -103,7 +103,7 @@ function Schedule({ states, canEdit, onLog }: { states: MachinePmState[]; canEdi
                   <span className={`pill ${PM_STATUS_CLS[st.status]}`} style={{ marginTop: 4 }}>{dueText(st)}</span>
                 </>}
               </td>
-              <td>{st.lastAny ? <>{fmtDayLong(st.lastAny.date)}<div className="small muted">{TYPE_LABEL[st.lastAny.type]}{st.lastAny.doneBy ? ` · ${st.lastAny.doneBy}${shiftShort(mechanics, st.lastAny.doneBy)}` : ''}</div></> : <span className="muted">—</span>}</td>
+              <td>{st.lastAny ? <>{fmtDayLong(st.lastAny.date)}<div className="small muted">{TYPE_LABEL[st.lastAny.type]}{st.lastAny.doneBy && <> · <Person name={st.lastAny.doneBy} size={18} />{shiftShort(mechanics, st.lastAny.doneBy)}</>}</div></> : <span className="muted">—</span>}</td>
               <td>
                 {st.lastMonthly ? <>{t('Last:')} {fmtDayLong(st.lastMonthly.date)}</> : <span className="muted">{t('No monthly yet')}</span>}
                 <div className="small muted">{t('Next monthly:')} {st.lastMonthly ? fmtDayLong(st.nextMonthly) : t('due now')}</div>
@@ -162,7 +162,7 @@ function HistoryTab({ canEdit, onEdit }: { canEdit: boolean; onEdit: (e: PmLog) 
                   <td className="nowrap"><b>{fmtDayLong(l.date)}</b></td>
                   <td>{l.machine}</td>
                   <td><span className={`pill ${l.type === 'monthly' ? 'info' : 'neutral'}`}>{TYPE_LABEL[l.type]}</span></td>
-                  <td>{l.doneBy || <span className="muted">—</span>}{l.doneBy && mechShift(mechanics, l.doneBy) && <div className="small muted">{t(mechShift(mechanics, l.doneBy))}</div>}</td>
+                  <td>{l.doneBy ? <Person name={l.doneBy} /> : <span className="muted">—</span>}{l.doneBy && mechShift(mechanics, l.doneBy) && <div className="small muted">{t(mechShift(mechanics, l.doneBy))}</div>}</td>
                   <td className="nowrap">{l.nextDue ? fmtDayLong(l.nextDue) : '—'}</td>
                   <td className="small" style={{ maxWidth: 320 }}>{l.notes}</td>
                   {canEdit && <td><div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>

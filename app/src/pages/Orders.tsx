@@ -6,7 +6,7 @@ import { applyUpsert, deleteDoc, getState, newId, saveDoc, toast, toastError, us
 import { fmtDate, money, navigate, stockStatus, todayISO, matches, reorderQty, timeAgo, setQuery } from '../lib/util';
 import { Logo } from '../components/Logo';
 import { getLang, plural, t } from '../lib/i18n';
-import { Combobox, Empty, Field, SearchInput, confirmDialog, NumberInput, Spinner } from '../components/ui';
+import { Combobox, Empty, Field, SearchInput, confirmDialog, NumberInput, Spinner, Person } from '../components/ui';
 
 export const ORDER_STATUS: Record<OrderStatus, { label: string; cls: string }> = {
   draft: { label: 'Draft', cls: 'neutral' }, submitted: { label: 'Submitted', cls: 'info' }, approved: { label: 'Approved', cls: 'info' },
@@ -58,7 +58,7 @@ function OrderList({ query }: { query: URLSearchParams }) {
               {list.map((o) => (
                 <tr key={o.id} className="clickable" onClick={() => navigate(`/orders/${o.id}`)}>
                   <td><b className="mono">{o.number}</b><div className="small muted">{o.title}{o.machine ? ` · ${o.machine}` : ''}</div></td>
-                  <td>{o.requestedBy || '—'}<div className="small muted">{timeAgo(o.createdAt)}</div></td>
+                  <td>{o.requestedBy ? <Person name={o.requestedBy} /> : '—'}<div className="small muted">{timeAgo(o.createdAt)}</div></td>
                   <td>{fmtDate(o.dateNeeded)}</td>
                   <td>{o.priority && <span className={`pill ${PRIORITY[o.priority]?.cls}`}>{t(o.priority === 'low' ? 'Low priority' : PRIORITY[o.priority]?.label || '')}</span>}</td>
                   <td><span className={`pill ${ORDER_STATUS[o.status]?.cls}`}>{t(ORDER_STATUS[o.status]?.label || '')}</span></td>

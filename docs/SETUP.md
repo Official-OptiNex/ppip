@@ -62,10 +62,10 @@ Admin → Backups shows a green check once the key is set.
 ## 5. USB stick version (no install)
 
 1. Build it. Either:
-   - **Easiest:** if you set up GitHub Actions deploy (step 2 alternative) and the `PPIP_SERVER_URL` variable (step 4), open GitHub → Actions → latest *Deploy* run → download **Process-Engineer-USB**.
+   - **Easiest:** if you set up GitHub Actions deploy (step 2 alternative) and the `PPIP_SERVER_URL` variable (step 4), open GitHub → Actions → latest *Deploy* run → download **Process-Technician-USB**.
    - **Or on any PC with Node.js installed:** `PPIP_SERVER_URL=https://ppip.<your-name>.workers.dev npm run build:usb` (on Windows PowerShell: `$env:PPIP_SERVER_URL="https://..."; npm run build:usb`).
-2. Copy the **`Process Engineer`** folder onto a USB stick.
-3. On any PC, double-click **`Start Process Engineer (Windows).bat`**. It opens in its own Edge window (Edge is on every Windows PC), and nothing is installed.
+2. Copy the **`Process Technician`** folder onto a USB stick.
+3. On any PC, double-click **`Start Process Technician (Windows).bat`**. It opens in its own Edge window (Edge is on every Windows PC), and nothing is installed.
 
 The USB version talks to the same online database, so every stick and browser is always in sync, live. If a PC has no internet, it still opens and shows the last data it saw. Changes made offline are queued and sent automatically when it reconnects. Each person's sign-in is saved on the stick (in `.browser-profile`).
 

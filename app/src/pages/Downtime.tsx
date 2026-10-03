@@ -4,7 +4,7 @@ import { DOWNTIME_CATEGORIES, type Downtime } from '../../../shared/types';
 import { deleteDoc, newId, saveDoc, toast, toastError, useCanEdit, useStore } from '../lib/store';
 import { download, fmtDateTime, matches, setQuery, toCSV, todayISO, uniqueSorted } from '../lib/util';
 import { HBarList } from '../components/Charts';
-import { Combobox, Empty, Field, Modal, NumberInput, SearchInput, confirmDialog } from '../components/ui';
+import { Combobox, Empty, Field, Modal, NumberInput, SearchInput, confirmDialog, Person } from '../components/ui';
 import { plural, t } from '../lib/i18n';
 
 const DAY = 86_400_000;
@@ -129,7 +129,7 @@ export function DowntimePage({ query, welderOnly }: { query: URLSearchParams; we
                     <td>{d.category && <span className="pill neutral" style={{ marginRight: 6 }}>{t(d.category)}</span>}{d.problem}{d.fix && <div className="small muted">{t('Fix:')} {d.fix}</div>}{!welderOnly && d.bpm ? <div className="small muted">{t('{n} bags/min', { n: d.bpm })}</div> : null}</td>
                     <td className="num nowrap"><b>{d.minutes != null ? fmtMinutes(d.minutes) : '—'}</b></td>
                     {welderOnly && <td className="num nowrap">{d.bpm ? `${d.bpm} bpm` : '—'}</td>}
-                    <td>{d.reportedBy || <span className="muted">—</span>}</td>
+                    <td>{d.reportedBy ? <Person name={d.reportedBy} /> : <span className="muted">—</span>}</td>
                     {canEdit && <td onClick={(ev) => ev.stopPropagation()}><div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
                       <button className="btn sm icon" onClick={() => setEditing(d)} aria-label={t('Edit')} title={t('Edit')}><Pencil size={17} /></button>
                       <button className="btn sm icon danger-ghost" onClick={() => remove(d)} aria-label={t('Delete')} title={t('Delete')}><Trash2 size={17} /></button>
