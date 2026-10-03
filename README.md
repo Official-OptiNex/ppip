@@ -6,7 +6,7 @@ A private, live-updating web app for a maintenance / process technician team:
 - **Stock tracking**: one-click Take / Receive / Count, with a full history of who did what.
 - **Alerts**: in-app notifications (plus optional Windows / phone pop-ups) when a part runs low or runs out, and when a knife or roller PM is due.
 - **Order guides**: type up parts requests, then print them in your own format (the layout is editable). You can build one from low stock in one click and receive it back into stock.
-- **Machine PMs**: log weekly / monthly PMs (machine, date, who did it). The next due date is automatic: 7 days after the last PM of any type, plus a monthly PM once a month. Shows overdue / due-today alerts, history, and per-machine settings.
+- **Machine PMs**: log weekly / monthly PMs (machine, date, who did it). The next due date is automatic: 7 days after the last PM of any type, plus a monthly PM once a month. Shows overdue / due-today alerts, history, and per-machine settings. 
 - **Hot knives and rollers**: which machine each one is on and how long it's been there, every install and pull date (with an optional removal reason), and a "how long they last" view.
 - **Sonic welders**: one horn and one anvil per welder, with change history and a glitch log (speed in bags/min).
 - **Downtime & glitches** and **crushed cores** logs, with weekly totals and CSV export.
