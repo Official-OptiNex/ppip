@@ -404,7 +404,7 @@ export function needsReorder(s: StockStatus) { return s === 'low' || s === 'orde
 
 export const DEFAULT_PRINT_TEMPLATE: PrintTemplate = {
   title: 'Parts Order Request',
-  subtitle: 'Maintenance / Process Engineering',
+  subtitle: 'Maintenance / Process Technician',
   headerNote: '',
   footerNote: 'Please return completed form to the maintenance office.',
   showLogo: true,
@@ -418,7 +418,7 @@ export const DEFAULT_PRINT_TEMPLATE: PrintTemplate = {
 export const DEFAULT_SETTINGS: Settings = {
   id: 'app',
   companyName: 'My Plant',
-  department: 'Process Engineering / Maintenance',
+  department: 'Process Technician / Maintenance',
   categories: ['Bearings', 'Belts', 'Electrical', 'Fasteners', 'Heaters', 'Hot Knives', 'Hydraulics', 'Motors', 'Pneumatics', 'Rollers', 'Sensors', 'Seals & O-Rings', 'Springs', 'Tooling', 'Other'],
   locations: ['Crib A', 'Crib B', 'Maint. Shop', 'Line Side'],
   units: ['ea', 'pk', 'box', 'ft', 'in', 'm', 'roll', 'set', 'pair', 'gal', 'lb'],

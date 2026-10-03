@@ -5,6 +5,7 @@ import { App } from './App';
 import { boot } from './lib/store';
 import { isFileMode } from './lib/api';
 import { useLang } from './lib/i18n';
+import { listenForInstall } from './lib/install';
 
 /** Re-mount the app when the language changes so every screen redraws in the new language. */
 function Root() {
@@ -12,6 +13,7 @@ function Root() {
   return <App key={lang} />;
 }
 
+listenForInstall();
 boot();
 createRoot(document.getElementById('root')!).render(<StrictMode><Root /></StrictMode>);
 

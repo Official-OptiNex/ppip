@@ -8,6 +8,7 @@ import { t } from '../lib/i18n';
 import { Avatar, Field } from '../components/ui';
 import { ImagePicker } from '../components/ImagePicker';
 import { LangSwitch } from '../components/LangSwitch';
+import { InstallApp } from '../components/InstallApp';
 import { roleName } from '../components/Layout';
 
 /** Save my profile picture (or remove it with null). */
@@ -50,6 +51,8 @@ export function ProfilePage() {
         <Avatar name={me.name} image={me.avatar} size={72} />
         <div><h1>{me.name}</h1><div className="muted">{me.email} · {t(roleName(me.role))}</div></div>
       </div>
+
+      <InstallApp variant="card" />
 
       <div className="card card-pad stack" data-tour="language">
         <h2><Languages size={22} style={{ verticalAlign: -4 }} /> {t('Language')} / Idioma</h2>

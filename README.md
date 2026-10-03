@@ -1,6 +1,6 @@
-# Process Engineer
+# Process Technician
 
-A private, live-updating web app for a maintenance / process engineering department:
+A private, live-updating web app for a maintenance / process technician team:
 
 - **Parts inventory**: search, sort, filter; green / orange / red stock status; photos; order links; decommission.
 - **Stock tracking**: one-click Take / Receive / Count, with a full history of who did what.

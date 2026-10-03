@@ -1,6 +1,6 @@
 @echo off
 rem ---------------------------------------------------------------
-rem  Process Engineer  (portable, no install needed)
+rem  Process Technician  (portable, no install needed)
 rem  Opens the app in its own window using Microsoft Edge, which is
 rem  on every Windows 10/11 PC. Your sign-in is kept on this USB stick.
 rem  All data lives online, so every USB stick and browser stays in sync.

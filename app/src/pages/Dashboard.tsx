@@ -9,7 +9,7 @@ import { useCanEdit, useIsAdmin, useStore } from '../lib/store';
 import { stockStatus, money, partValue, timeAgo, navigate, reorderQty } from '../lib/util';
 import { usePmStates, pmDueCount } from '../lib/pmhooks';
 import { parseDay } from '../../../shared/pm';
-import { Thumb, Empty, Avatar } from '../components/ui';
+import { Thumb, Empty, UserAvatar } from '../components/ui';
 import { StockDialog } from '../components/PartDialogs';
 import { openQuickLog } from '../components/QuickLog';
 import type { Part } from '../../../shared/types';
@@ -153,7 +153,7 @@ export function Dashboard() {
               <div className="list">
                 {(d.followUps.length ? [...d.followUps.slice(0, 3), ...d.recentNotes.filter((n) => !(n.followUp && !n.done))].slice(0, 4) : d.recentNotes).map((n) => (
                   <a key={n.id} className="list-item" href="#/notes">
-                    <Avatar name={n.author || '?'} />
+                    <UserAvatar name={n.author} />
                     <div className="grow" style={{ minWidth: 0 }}>
                       <div className="clamp-2">{n.text}</div>
                       <div className="small muted">{[n.author, n.machine, timeAgo(n.createdAt || n.updatedAt)].filter(Boolean).join(' · ')}</div>
@@ -171,7 +171,7 @@ export function Dashboard() {
               <div className="list">
                 {activity.slice(0, 7).map((a) => (
                   <div key={a.id} className="list-item">
-                    <Avatar name={a.userName || '?'} size={30} />
+                    <UserAvatar name={a.userName} size={30} />
                     <div className="grow" style={{ minWidth: 0 }}>
                       <div className="clamp-2">{a.summary}</div>
                       <div className="small muted">{a.userName} · {timeAgo(a.at)}</div>

@@ -29,7 +29,11 @@ export function QuickLogBubble() {
   useEffect(() => {
     const on = (e: Event) => setOpen(((e as CustomEvent).detail as Mode) || 'use');
     window.addEventListener('ppip:quicklog', on);
-    return () => window.removeEventListener('ppip:quicklog', on);
+    // desktop-icon shortcut "Take a part" opens #/?quick=use
+    const fromShortcut = () => { if (/[?&]quick=use\b/.test(location.hash)) { setOpen('use'); history.replaceState(null, '', '#/'); } };
+    fromShortcut();
+    window.addEventListener('hashchange', fromShortcut);
+    return () => { window.removeEventListener('ppip:quicklog', on); window.removeEventListener('hashchange', fromShortcut); };
   }, []);
   if (!canEdit) return null;
   return (

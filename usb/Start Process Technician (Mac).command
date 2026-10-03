@@ -1,5 +1,5 @@
 #!/bin/bash
-# Process Engineer (portable). Double-click to open.
+# Process Technician (portable). Double-click to open.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PAGE="file://$HERE/app/index.html"
 PROFILE="$HERE/.browser-profile"

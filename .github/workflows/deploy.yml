@@ -35,7 +35,7 @@ jobs:
           PPIP_SERVER_URL: ${{ vars.PPIP_SERVER_URL }}
       - uses: actions/upload-artifact@v4
         with:
-          name: Process-Engineer-USB
+          name: Process-Technician-USB
           path: dist/usb/
           include-hidden-files: false
           retention-days: 90

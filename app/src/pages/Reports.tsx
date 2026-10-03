@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Printer, Download, PackageMinus, PackagePlus, DollarSign, XCircle, AlertTriangle, Flame, Wrench, Timer, Cylinder } from 'lucide-react';
 import { fmtMinutes } from './Downtime';
 import { locale, t } from '../lib/i18n';
-import { tx } from '../components/ui';
+import { tx, Person } from '../components/ui';
 import { api, errorMessage } from '../lib/api';
 import { useStore } from '../lib/store';
 import { DAY, fmtDate, fmtDateTime, money, num, setQuery, stockStatus, download, toCSV } from '../lib/util';
@@ -144,7 +144,7 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
               <thead><tr><th>{t('Date')}</th><th>{t('Machine')}</th><th>{t('Type')}</th><th>{t('Done by')}</th><th>{t('Notes')}</th></tr></thead>
               <tbody>
                 {pmLate.map((st) => <tr key={'late' + st.machine} className="st-out"><td colSpan={5}><b>{t('Overdue now:')}</b> {st.machine} — {t(st.nextType === 'monthly' ? 'Monthly PM due {date}' : 'Weekly PM due {date}', { date: st.nextDue ? parseDay(st.nextDue).toLocaleDateString(locale()) : '' })}</td></tr>)}
-                {pmsDone.map((l) => <tr key={l.id}><td className="nowrap">{parseDay(l.date).toLocaleDateString(locale(), { weekday: 'short', month: 'short', day: 'numeric' })}</td><td>{l.machine}</td><td>{t(l.type === 'monthly' ? 'Monthly' : 'Weekly')}</td><td>{l.doneBy || '—'}</td><td className="small">{l.notes}</td></tr>)}
+                {pmsDone.map((l) => <tr key={l.id}><td className="nowrap">{parseDay(l.date).toLocaleDateString(locale(), { weekday: 'short', month: 'short', day: 'numeric' })}</td><td>{l.machine}</td><td>{t(l.type === 'monthly' ? 'Monthly' : 'Weekly')}</td><td>{l.doneBy ? <Person name={l.doneBy} size={18} /> : '—'}</td><td className="small">{l.notes}</td></tr>)}
               </tbody>
             </table>
           )}
@@ -154,7 +154,7 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
           {rep.equipment.length > 0 && (
             <table className="tbl">
               <tbody>
-                {rep.equipment.map((a) => <tr key={a.id}><td>{a.summary}</td><td className="small muted nowrap">{fmtDateTime(a.at)} · {a.userName}</td></tr>)}
+                {rep.equipment.map((a) => <tr key={a.id}><td>{a.summary}</td><td className="small muted nowrap">{fmtDateTime(a.at)} · <Person name={a.userName} size={18} /></td></tr>)}
               </tbody>
             </table>
           )}
@@ -182,13 +182,13 @@ export function ReportsPage({ query }: { query: URLSearchParams }) {
           {rep.adjustments.length > 0 && (
             <table className="tbl">
               <thead><tr><th>{t('Part')}</th><th className="num">{t('Change')}</th><th className="num">{t('Now')}</th><th>{t('By')}</th><th>{t('When')}</th><th>{t('Note')}</th></tr></thead>
-              <tbody>{rep.adjustments.map((a) => <tr key={a.id}><td>{a.partName}</td><td className="num">{a.delta > 0 ? '+' : ''}{a.delta}</td><td className="num">{a.qtyAfter}</td><td>{a.userName}</td><td className="small">{fmtDateTime(a.at)}</td><td className="small">{a.note}</td></tr>)}</tbody>
+              <tbody>{rep.adjustments.map((a) => <tr key={a.id}><td>{a.partName}</td><td className="num">{a.delta > 0 ? '+' : ''}{a.delta}</td><td className="num">{a.qtyAfter}</td><td><Person name={a.userName} size={18} /></td><td className="small">{fmtDateTime(a.at)}</td><td className="small">{a.note}</td></tr>)}</tbody>
             </table>
           )}
         </Section>
 
         {rep.orders.length > 0 && <Section title="Order guide activity" empty="">
-          <table className="tbl"><tbody>{rep.orders.map((a) => <tr key={a.id}><td>{a.summary}</td><td className="small muted nowrap">{fmtDateTime(a.at)} · {a.userName}</td></tr>)}</tbody></table>
+          <table className="tbl"><tbody>{rep.orders.map((a) => <tr key={a.id}><td>{a.summary}</td><td className="small muted nowrap">{fmtDateTime(a.at)} · <Person name={a.userName} size={18} /></td></tr>)}</tbody></table>
         </Section>}
         <p className="small muted">{t('{a} stock entries by {b} people in this period.', { a: rep.totals.events, b: rep.totals.people })}</p>
       </>}

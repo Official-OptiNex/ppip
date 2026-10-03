@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import {
   Undo2, IdCard, Menu, ShoppingCart, GraduationCap, Wrench, CheckCircle2, AlertTriangle, XCircle, Archive, PackageMinus, PackagePlus, ClipboardCheck,
   Smartphone, Search, Flame, Printer, Wifi, Usb, AudioWaveform, Timer, Cylinder, Languages, Camera, Type, Tag, Scissors, Lock, Eye, History, Download,
-  HelpCircle, Plus, Trash2, LogIn, LogOut, KeyRound, ChevronDown, ClipboardList, PackageCheck, Hourglass, Factory, NotebookPen, Flag, Megaphone, LayoutDashboard,
+  HelpCircle, Plus, Trash2, LogIn, LogOut, MonitorDown, KeyRound, ChevronDown, ClipboardList, PackageCheck, Hourglass, Factory, NotebookPen, Flag, Megaphone, LayoutDashboard,
 } from 'lucide-react';
 import { DEFAULT_WEEKLY_DAYS } from '../../../shared/pm';
 import { startTour } from '../components/Tour';
@@ -87,8 +87,8 @@ function sections(): Section[] {
         { icon: <Trash2 />, title: 'Delete or retire?', text: '**Retire / scrap** (or **Decommission** for parts) keeps it on record but hides it. **Delete permanently** removes it for good — use it only for mistakes.' },
         { icon: <Wifi />, title: 'The internet dropped', text: 'Keep working. Changes are saved on your computer and sync when the connection is back. The green **Live** dot means you are connected.' },
         { icon: <Download />, title: 'Can I get it into Excel?', text: 'Yes — most pages have a download button, and **More tools** → **Import / Export** downloads everything.' },
-        { icon: <Smartphone />, title: 'Can I use my phone?', text: 'Yes. Open the website and choose **Add to Home Screen** — it then works like an app.' },
-        { icon: <Usb />, title: 'Running from a USB stick', text: 'Open **Start Process Engineer** on the stick. It uses the same data as the website.' },
+        { icon: <MonitorDown />, title: 'Install it as an app (computer or phone)', steps: ['Click **Install app** at the bottom of the menu (or in **My settings**).', 'Click **Install**. It now opens from the desktop, taskbar or home screen in its own window.', 'Right-click the icon for shortcuts: **Shift notes**, **Take a part**, **Log downtime**, **Crushed core**.'] },
+        { icon: <Usb />, title: 'Running from a USB stick', text: 'Open **Start Process Technician** on the stick. It uses the same data as the website.' },
         { icon: <Lock />, title: 'Is it private?', text: 'Yes. Only people with an account can sign in. Accounts are created by an admin.' },
       ],
     },

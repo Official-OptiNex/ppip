@@ -7,7 +7,7 @@ import { DEFAULT_PRINT_TEMPLATE, type PrintTemplate, type PublicUser, type Role,
 import { api, errorMessage, getToken, serverUrl } from '../lib/api';
 import { saveDoc, setState, toast, toastError, useIsAdmin, useStore, loadBootstrap } from '../lib/store';
 import { bytes, fmtDateTime, navigate, timeAgo, download } from '../lib/util';
-import { Field, Modal, NumberInput, Tabs, confirmDialog, Spinner, Seg } from '../components/ui';
+import { Field, Modal, NumberInput, Tabs, confirmDialog, Spinner, Seg, UserAvatar } from '../components/ui';
 import { OrderSheet } from './Orders';
 import { MechanicsTab } from './Mechanics';
 import { startTour } from '../components/Tour';
@@ -153,7 +153,7 @@ function UserForm({ user, onClose, onSaved }: { user: Partial<PublicUser>; onClo
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
   if (done) {
-    const text = `Process Engineer login\nSite: ${serverUrl() || location.origin}\nName: ${done.name}\nEmail: ${done.email}\nPassword: ${done.password}`;
+    const text = `Process Technician login\nSite: ${serverUrl() || location.origin}\nName: ${done.name}\nEmail: ${done.email}\nPassword: ${done.password}`;
     return (
       <Modal title={isNew ? 'Account created' : 'Password updated'} onClose={onClose} footer={<button className="btn primary lg" onClick={onClose}>{t('Done')}</button>}>
         <div className="stack">
@@ -240,7 +240,7 @@ function SystemTab() {
           <div className="list" style={{ maxHeight: 420, overflowY: 'auto' }}>
             {info.sessions.map((s) => (
               <div key={s.id} className="list-item">
-                <div className="grow"><b>{s.userName || '?'}</b> <span className="muted">· {device(s.agent)} {browser(s.agent)}</span><div className="small muted">{t('last active {a} · signed in {b}', { a: timeAgo(s.lastUsed), b: fmtDateTime(s.createdAt) })}</div></div>
+                <UserAvatar name={s.userName} /><div className="grow"><b>{s.userName || '?'}</b> <span className="muted">· {device(s.agent)} {browser(s.agent)}</span><div className="small muted">{t('last active {a} · signed in {b}', { a: timeAgo(s.lastUsed), b: fmtDateTime(s.createdAt) })}</div></div>
                 <button className="btn sm" onClick={() => revoke(s.id)} title={t('Sign this device out')}><LogOut size={16} /></button>
               </div>
             ))}
@@ -494,7 +494,7 @@ function PrintTab() {
         <div className="grid-2">
           <Field label="Accent color"><input className="input" type="color" value={tp.accent || '#1f5fbf'} onChange={(e) => set('accent', e.target.value)} style={{ padding: 4 }} /></Field>
         </div>
-        <label className="check"><input type="checkbox" checked={!!tp.showLogo} onChange={(e) => set('showLogo', e.target.checked)} />{t('Show the Process Engineer logo')}</label>
+        <label className="check"><input type="checkbox" checked={!!tp.showLogo} onChange={(e) => set('showLogo', e.target.checked)} />{t('Show the Process Technician logo')}</label>
         <Field label="Note at the top (optional)"><textarea className="input" value={tp.headerNote || ''} onChange={(e) => set('headerNote', e.target.value)} /></Field>
         <Field label="Footer note"><input className="input" value={tp.footerNote || ''} onChange={(e) => set('footerNote', e.target.value)} /></Field>
         <Field label="Columns">

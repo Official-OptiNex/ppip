@@ -1,9 +1,9 @@
-Process Engineer  (USB / portable version)
+Process Technician  (USB / portable version)
 ===========================================
 
 HOW TO USE
-  Windows:  double-click  "Start Process Engineer (Windows).bat"
-  Mac:      double-click  "Start Process Engineer (Mac).command"   (first time: right-click > Open)
+  Windows:  double-click  "Start Process Technician (Windows).bat"
+  Mac:      double-click  "Start Process Technician (Mac).command"   (first time: right-click > Open)
 
 Nothing is installed on the computer. The app opens in its own window
 (Microsoft Edge or Chrome). Your sign-in is remembered on this USB stick.

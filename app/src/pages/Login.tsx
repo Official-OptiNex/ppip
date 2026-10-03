@@ -34,7 +34,7 @@ export function Login() {
 
   const checkServer = () => {
     if (!isFileMode) return true;
-    if (!/^https?:\/\//.test(server.trim())) { setErr(t('Enter the web address of your Process Engineer site (starts with https://).')); return false; }
+    if (!/^https?:\/\//.test(server.trim())) { setErr(t('Enter the web address of your Process Technician site (starts with https://).')); return false; }
     setServerUrl(server);
     return true;
   };
@@ -120,7 +120,7 @@ export function Login() {
           {news.map((a) => <AnnouncementBanner key={a.id} a={a} />)}
           {isFileMode && (
             <div className="card card-pad">
-              <Field label={<span className="row" style={{ gap: 6 }}><Server size={16} />{t('Server address')}</span>} hint="Running from USB. This is the web address of your Process Engineer site.">
+              <Field label={<span className="row" style={{ gap: 6 }}><Server size={16} />{t('Server address')}</span>} hint="Running from USB. This is the web address of your Process Technician site.">
                 <input className="input" value={server} onChange={(e) => setServer(e.target.value)} placeholder="https://ppip.yourname.workers.dev" />
               </Field>
             </div>
