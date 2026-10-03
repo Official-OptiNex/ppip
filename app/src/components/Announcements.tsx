@@ -71,7 +71,7 @@ export function AnnouncementBanner({ a, onHide }: { a: Pick<Announcement, 'title
       <L.icon size={24} className="ann-icon" aria-hidden />
       <div className="grow" style={{ minWidth: 0 }}>
         <b className="ann-title">{title}</b>
-        {body && <div className="ann-body">{body}</div>}
+        {body && <span className="ann-body">{body}</span>}
       </div>
       {onHide && <button className="btn sm ghost" onClick={onHide} aria-label={t('Hide')}><X size={16} />{t('Hide')}</button>}
     </div>

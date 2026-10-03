@@ -125,7 +125,7 @@ export function Layout({ path, children }: { path: string; children: ReactNode }
             <button className="btn signout" onClick={() => logout()} title={t('Sign out')} aria-label={t('Sign out')} data-tour="signout"><LogOut size={20} /><span className="signout-label">{t('Sign out')}</span></button>
           </div>
         </header>
-        <BadgeNotice />
+        {(path === '/' || path === '/profile') && <BadgeNotice />}
         <AnnouncementBar />
         <main className="content" id="main">{children}</main>
       </div>

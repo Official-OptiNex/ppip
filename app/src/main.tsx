@@ -4,7 +4,7 @@ import './styles.css';
 import { App } from './App';
 import { boot } from './lib/store';
 import { isFileMode } from './lib/api';
-import { useLang } from './lib/i18n';
+import { langReady, useLang } from './lib/i18n';
 import { listenForInstall } from './lib/install';
 
 /** Re-mount the app when the language changes so every screen redraws in the new language. */
@@ -15,7 +15,8 @@ function Root() {
 
 listenForInstall();
 boot();
-createRoot(document.getElementById('root')!).render(<StrictMode><Root /></StrictMode>);
+// Spanish users: wait for the Spanish text (a moment, then cached) so the first screen isn't English
+langReady().then(() => createRoot(document.getElementById('root')!).render(<StrictMode><Root /></StrictMode>));
 
 if (!isFileMode && 'serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));

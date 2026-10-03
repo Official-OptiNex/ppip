@@ -1306,7 +1306,11 @@ export class Store extends DurableObject<Env> {
     this.sql.exec(`DELETE FROM notifications WHERE at<?`, now - 120 * DAY);
     this.sql.exec(`DELETE FROM undo WHERE at<?`, now - UNDO_DAYS * DAY);
     // remove images nobody references any more (older than 2 days so in-progress edits are safe)
-    const used = new Set(this.allDocs<Part>('parts').map((p) => p.imageId).filter(Boolean));
+    // (part photos, photos on shift notes / downtime, and everyone's profile picture)
+    const used = new Set<string>([
+      ...(['parts', 'notes', 'downtime'] as const).flatMap((k) => this.allDocs<{ imageId?: string }>(k).map((d) => d.imageId || '')),
+      ...this.sql.exec(`SELECT avatar FROM users WHERE avatar IS NOT NULL`).toArray().map((r) => r.avatar as string),
+    ].filter(Boolean));
     for (const r of this.sql.exec(`SELECT id FROM images WHERE at<?`, now - 2 * DAY).toArray()) {
       if (!used.has(r.id as string)) this.sql.exec(`DELETE FROM images WHERE id=?`, r.id as string);
     }
@@ -1329,7 +1333,7 @@ export class Store extends DurableObject<Env> {
   }
 }
 
-const BADGE_RULE = 'Enter the badge ID exactly as it is on the badge (letters, numbers and symbols like 7A:018 are fine).';
+const BADGE_RULE = 'Enter the badge ID exactly as it is on the badge (letters, numbers and symbols like AB-1234 are fine).';
 /**
  * Keep the install → pull history in step with the item's current state:
  * an installed item always has one open stretch for its machine; anything else has none open.
@@ -1345,7 +1349,7 @@ function syncHistory(e: Equipment, now: number) {
   e.history = h;
 }
 
-/** Badge IDs can contain any letters, numbers and symbols (e.g. "7a:018"). Only surrounding spaces and invisible control characters are dropped. */
+/** Badge IDs can contain any letters, numbers and symbols (e.g. "ab-1234"). Only surrounding spaces and invisible control characters are dropped. */
 function normBadge(raw: string): string | null {
   const b = String(raw).replace(/[\u0000-\u001f\u007f]/g, '').trim();
   return b.length >= 1 && b.length <= 40 ? b : null;
