@@ -1,8 +1,12 @@
 // English / Spanish. Text is written in English in the code and wrapped in t('…');
 // the Spanish dictionary (es.ts) maps each English string to its translation.
 // Anything missing from the dictionary simply shows in English.
+// The dictionary is only downloaded when someone actually uses Spanish (keeps start-up fast).
 import { useSyncExternalStore } from 'react';
-import { ES } from './es';
+
+let ES: Record<string, string> = {};
+let esLoad: Promise<void> | null = null;
+function loadEs() { return (esLoad ??= import('./es').then((m) => { ES = m.ES; values = null; })); }
 
 export type Lang = 'en' | 'es';
 const KEY = 'ppip.lang';
@@ -27,14 +31,21 @@ const listeners = new Set<() => void>();
 document.documentElement.lang = lang;
 
 export function getLang() { return lang; }
-/** Switch the screen language right away (the whole app re-renders). Saving to the account is done by the caller. */
+/** Fetch the Spanish text in the background so switching is instant (used on the sign-in screen). */
+export function preloadEs() { loadEs().catch(() => {}); }
+/** Resolves once the current language's text is ready (call before the first render). */
+export function langReady(): Promise<void> { return lang === 'es' ? loadEs().catch(() => {}) : Promise.resolve(); }
+/** Switch the screen language (the whole app re-renders once its text is loaded). Saving to the account is done by the caller. */
 export function setLang(l: Lang) {
   if (l !== 'en' && l !== 'es') return;
   try { localStorage.setItem(KEY, l); } catch { /* ignore */ }
   if (l === lang) return;
-  lang = l;
-  document.documentElement.lang = l;
-  listeners.forEach((f) => f());
+  const apply = () => {
+    lang = l;
+    document.documentElement.lang = l;
+    listeners.forEach((f) => f());
+  };
+  if (l === 'es') loadEs().then(apply, apply); else apply();
 }
 export function useLang() {
   return useSyncExternalStore((f) => { listeners.add(f); return () => listeners.delete(f); }, () => lang);

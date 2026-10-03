@@ -24,7 +24,7 @@ export function Modal({ title, onClose, children, footer, size, icon }: {
         <div className="modal-head">
           {icon}
           <h2>{tx(title)}</h2>
-          <button className="btn icon ghost" onClick={onClose} aria-label={tr('Close')}><X size={22} /></button>
+          <button type="button" className="btn icon ghost" onClick={onClose} aria-label={tr('Close')}><X size={22} /></button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
@@ -45,7 +45,7 @@ export function Drawer({ onClose, children, head }: { onClose: () => void; child
       <aside className="drawer" role="dialog" aria-modal="true">
         <div className="drawer-head">
           <div className="grow">{head}</div>
-          <button className="btn icon ghost" onClick={onClose} aria-label={tr('Close')}><X size={22} /></button>
+          <button type="button" className="btn icon ghost" onClick={onClose} aria-label={tr('Close')}><X size={22} /></button>
         </div>
         <div className="drawer-body">{children}</div>
       </aside>

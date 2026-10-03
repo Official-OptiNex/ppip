@@ -246,6 +246,7 @@ export interface Downtime extends BaseDoc {
   fix?: string;
   bpm?: number; // speed it happened at (bags per minute)
   reportedBy?: string;
+  imageId?: string; // optional photo of the problem
 }
 
 /** A crushed core log entry. */
@@ -284,6 +285,7 @@ export interface ShiftNote extends BaseDoc {
   doneBy?: string;
   doneAt?: number | null;
   author?: string;
+  imageId?: string; // optional photo
 }
 
 export interface DocMap {
@@ -357,13 +359,13 @@ export const FIELD_SPECS: Record<DocKind, Record<string, FieldType>> = {
   machines: { name: 'str', area: 'str', notes: 'text', pmTracked: 'bool', pmWeeklyDays: 'num', pmMonthlyMonths: 'num' },
   mechanics: { name: 'str', shift: 'str', phone: 'str', notes: 'text', inactive: 'bool' },
   welders: { name: 'str', machine: 'str', model: 'str', notes: 'text' },
-  downtime: { machine: 'str', welder: 'str', startedAt: 'time', minutes: 'num', category: 'str', problem: 'text', fix: 'text', bpm: 'num', reportedBy: 'str' },
+  downtime: { machine: 'str', welder: 'str', startedAt: 'time', minutes: 'num', category: 'str', problem: 'text', fix: 'text', bpm: 'num', reportedBy: 'str', imageId: 'str' },
   cores: { at: 'time', tag: 'str', machine: 'str', notes: 'text', reportedBy: 'str' },
   announcements: {
     title: 'str', body: 'text', titleEs: 'str', bodyEs: 'text', level: 'str', audience: 'str', startsAt: 'time', endsAt: 'time',
     popup: 'bool', dismissible: 'bool', showOnLogin: 'bool', active: 'bool', author: 'str',
   },
-  notes: { text: 'text', machine: 'str', shift: 'str', followUp: 'bool', done: 'bool', doneBy: 'str', doneAt: 'time', author: 'str' },
+  notes: { text: 'text', machine: 'str', shift: 'str', followUp: 'bool', done: 'bool', doneBy: 'str', doneAt: 'time', author: 'str', imageId: 'str' },
   pms: { machine: 'str', date: 'str', type: 'str', doneBy: 'str', nextDue: 'str', notes: 'text' },
   equipment: {
     type: 'str', tag: 'str', status: 'str', machine: 'str', position: 'str', installedAt: 'time', lastServiceAt: 'time', pmDays: 'num',

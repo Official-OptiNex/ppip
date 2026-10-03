@@ -1,5 +1,5 @@
 // Badge scanners act like a keyboard: they "type" the whole ID very fast, then (usually) press Enter.
-// Badge IDs can contain anything: letters, numbers and symbols, e.g. "7a:018".
+// Badge IDs can contain anything: letters, numbers and symbols, e.g. "ab-1234".
 import { useEffect, useRef } from 'react';
 
 /** Max time between keys for a burst to count as a scan when it lands in the wrong box (name / password). */

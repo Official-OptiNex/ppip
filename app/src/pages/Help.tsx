@@ -31,6 +31,7 @@ function sections(): Section[] {
       id: 'team', title: 'Shift notes & announcements', icon: <NotebookPen />, topics: [
         { icon: <NotebookPen />, title: 'Leave a note for the next shift', steps: ['Open **Shift Notes** (in the menu, or **Shift note** on the Dashboard).', 'Type what the next shift needs to know. Pick the machine and shift if you like.', 'Click **Post note**. Everyone sees it right away.'] },
         { icon: <Flag />, title: 'Something still needs doing', text: 'Tick **Needs follow-up** when you post the note. It shows in orange with a count in the menu until someone clicks **Mark done**.' },
+        { icon: <Camera />, title: 'Add a photo to a note or downtime', text: 'Click **Add photo** when you write a shift note or log downtime — take it with the camera, your phone, or pick a file. Click the small picture to see it big.' },
         { icon: <Megaphone />, title: 'Announcements', text: 'Messages from an admin show as a coloured bar at the top of every page. Click **Hide** once you have read it. Red ones are urgent.' },
         { icon: <Megaphone />, title: 'Post an announcement (admins)', steps: ['**Admin** → **Announcements** → **New announcement**.', 'Pick a ready-made example or write your own headline and message. Choose the colour and who sees it.', 'Optional: set when it starts and ends, make it pop up, or show it on the sign-in screen. Click **Post announcement**.'] },
       ],
@@ -48,6 +49,7 @@ function sections(): Section[] {
         { icon: <ClipboardCheck />, title: 'I counted the shelf', text: 'Open the part → **Count** and enter what is actually there.' },
         { icon: <Plus />, title: 'Add a new part', steps: ['**Parts** → **Add part**.', 'Fill in the name, part number and manufacturer — the order link builds itself for most suppliers.', 'Set **Reorder at** (turns orange) and, if you like, **Order now at** (turns red).'] },
         { icon: <Smartphone />, title: 'Add a part photo with your phone', steps: ['Edit the part → **Take photo with phone**.', 'Scan the QR code with your phone camera and tap the link.', 'Take the picture and tap **Send**. It appears on the computer by itself.'] },
+        { icon: <Camera />, title: 'Take a photo with the webcam or camera', text: 'Anywhere you add a picture (parts, profile pictures, shift notes, downtime) click **Use this device’s camera**. Allow the camera when the browser asks, click **Take photo**, then **Use this photo**.' },
       ],
     },
     {

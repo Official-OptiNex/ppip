@@ -9,7 +9,7 @@ import { LangSwitch } from '../components/LangSwitch';
 import { AnnouncementBanner } from '../components/Announcements';
 import { IDLE_FLAG } from '../components/IdleLogout';
 import type { Announcement } from '../../../shared/types';
-import { t } from '../lib/i18n';
+import { preloadEs, t } from '../lib/i18n';
 
 export function Login() {
   const [name, setName] = useState('');
@@ -27,6 +27,7 @@ export function Login() {
   const nameRef = useRef<HTMLInputElement>(null);
   const pwRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => { const id = setTimeout(preloadEs, 300); return () => clearTimeout(id); }, []); // language button switches instantly
   useEffect(() => {
     if (isFileMode && !serverUrl()) return;
     api<{ badgeLogin: boolean; announcements?: Announcement[] }>('/login-info', { auth: false }).then((r) => { setBadgeOn(r.badgeLogin); setNews(r.announcements || []); }).catch(() => {});
@@ -140,7 +141,7 @@ export function Login() {
               <Field label="Or type your badge ID">
                 <div className="row">
                   <input ref={badgeRef} className="input grow mono" value={badge} onChange={(e) => setBadge(e.target.value.slice(0, 40))} onKeyDown={onBadgeKey}
-                    autoComplete="off" autoCapitalize="off" spellCheck={false} autoFocus placeholder={t('e.g. 7A:018')} aria-label={t('Badge number')} style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
+                    autoComplete="off" autoCapitalize="off" spellCheck={false} autoFocus placeholder={t('e.g. AB-1234')} aria-label={t('Badge number')} style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
                   <button className="btn primary lg" disabled={!!busy || !badge.trim()}><LogIn size={20} />{t('Go')}</button>
                 </div>
               </Field>

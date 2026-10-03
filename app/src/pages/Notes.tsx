@@ -8,6 +8,7 @@ import { safeGet, safeSet } from '../lib/api';
 import { UserAvatar, Person, Combobox, Empty, Field, Modal, SearchInput, Seg, confirmDialog } from '../components/ui';
 import { t } from '../lib/i18n';
 import { startOfToday, useMachineNames } from './Downtime';
+import { PhotoAttach, PhotoThumb } from '../components/PhotoAttach';
 
 type Show = 'all' | 'open' | 'today';
 const SHIFT_KEY = 'ppip.notes.shift';
@@ -68,6 +69,7 @@ function NoteComposer() {
   const [machine, setMachine] = useState('');
   const [shift, setShift] = useState(() => safeGet(SHIFT_KEY) || '');
   const [followUp, setFollowUp] = useState(false);
+  const [photo, setPhoto] = useState('');
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const me = useStore((s) => s.me);
@@ -76,9 +78,9 @@ function NoteComposer() {
     if (!text.trim()) { toast(t('Write the note.'), 'danger'); ref.current?.focus(); return; }
     setBusy(true);
     try {
-      await saveDoc('notes', newId(), { text: text.trim(), machine: machine.trim(), shift, followUp, author: me?.name }, 'Post note');
+      await saveDoc('notes', newId(), { text: text.trim(), machine: machine.trim(), shift, followUp, author: me?.name, imageId: photo }, 'Post note');
       if (shift) safeSet(SHIFT_KEY, shift);
-      setText(''); setMachine(''); setFollowUp(false);
+      setText(''); setMachine(''); setFollowUp(false); setPhoto('');
       toast(t('Note posted'));
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
@@ -99,7 +101,10 @@ function NoteComposer() {
         </Field>}
       </div>
       <div className="row wrap" style={{ justifyContent: 'space-between' }}>
-        <label className="check"><input type="checkbox" checked={followUp} onChange={(e) => setFollowUp(e.target.checked)} /><Flag size={18} />{t('Needs follow-up')}</label>
+        <div className="row wrap" style={{ gap: '1rem' }}>
+          <label className="check"><input type="checkbox" checked={followUp} onChange={(e) => setFollowUp(e.target.checked)} /><Flag size={18} />{t('Needs follow-up')}</label>
+          <PhotoAttach value={photo} onChange={setPhoto} label={t('Shift note')} />
+        </div>
         <button className="btn primary lg" type="submit" disabled={busy}><Send />{busy ? t('Saving…') : t('Post note')}</button>
       </div>
     </form>
@@ -130,6 +135,7 @@ function NoteCard({ n, canEdit, onEdit }: { n: ShiftNote; canEdit: boolean; onEd
             {n.followUp && n.done && <span className="pill ok"><CheckCircle2 size={14} />{t('Done')}{n.doneBy && <> · <Person name={n.doneBy} size={18} /></>}</span>}
           </div>
           <div className="note-text">{n.text}</div>
+          {n.imageId && <div style={{ marginTop: '0.5rem' }}><PhotoThumb id={n.imageId} size={110} /></div>}
         </div>
       </div>
       {canEdit && (
@@ -169,7 +175,10 @@ function NoteEdit({ note, onClose }: { note: ShiftNote; onClose: () => void }) {
             </select>
           </Field>}
         </div>
-        <label className="check"><input type="checkbox" checked={!!d.followUp} onChange={(e) => setD({ ...d, followUp: e.target.checked, done: e.target.checked ? d.done : false })} /><Flag size={18} />{t('Needs follow-up')}</label>
+        <div className="row wrap" style={{ gap: '1rem' }}>
+          <label className="check"><input type="checkbox" checked={!!d.followUp} onChange={(e) => setD({ ...d, followUp: e.target.checked, done: e.target.checked ? d.done : false })} /><Flag size={18} />{t('Needs follow-up')}</label>
+          <PhotoAttach value={d.imageId} onChange={(id) => setD({ ...d, imageId: id })} label={t('Shift note')} />
+        </div>
       </div>
     </Modal>
   );
