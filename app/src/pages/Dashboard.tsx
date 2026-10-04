@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   Package, XCircle, AlertTriangle, Wrench, ClipboardList, Plus, ShoppingCart, Activity as ActivityIcon, PackagePlus, ArrowRight, Timer, Cylinder,
-  PackageMinus, NotebookPen, Tag, Flag, Megaphone, CheckCircle2, Sparkles,
+  PackageMinus, NotebookPen, Tag, Flag, Megaphone, CheckCircle2, Sparkles, MoreHorizontal, ChevronUp,
 } from 'lucide-react';
 import { locale, plural, t } from '../lib/i18n';
 import { fmtMinutes, startOfWeek } from './Downtime';
@@ -12,6 +12,7 @@ import { parseDay } from '../../../shared/pm';
 import { Thumb, Empty, UserAvatar } from '../components/ui';
 import { StockDialog } from '../components/PartDialogs';
 import { openQuickLog } from '../components/QuickLog';
+import { safeGet, safeSet } from '../lib/api';
 import type { Part } from '../../../shared/types';
 
 const PM_CLS = { overdue: 'danger', today: 'warn', soon: 'warn', ok: 'ok', never: 'warn' } as const;
@@ -29,6 +30,9 @@ export function Dashboard() {
   const canEdit = useCanEdit();
   const isAdmin = useIsAdmin();
   const [receive, setReceive] = useState<Part | null>(null);
+  // the less-used buttons and numbers stay tucked away until someone asks for them (remembered on this computer)
+  const [more, setMore] = useState(() => safeGet('ppip.dash.more') === '1');
+  const toggleMore = (v: boolean) => { setMore(v); safeSet('ppip.dash.more', v ? '1' : '0'); };
   const pmStates = usePmStates();
   const pmDue = pmDueCount(pmStates);
   const pmOverdue = pmStates.filter((x) => x.status === 'overdue').length;
@@ -83,23 +87,30 @@ export function Dashboard() {
           <a className="qa qa-orange" href="#/downtime?log="><span className="qa-ic"><Timer /></span>{t('Log downtime')}</a>
           <a className="qa qa-red" href="#/cores?new"><span className="qa-ic"><Cylinder /></span>{t('Crushed core')}</a>
           <a className="qa qa-teal" href="#/notes"><span className="qa-ic"><NotebookPen /></span>{t('Shift note')}</a>
-          <a className="qa qa-blue" href="#/orders/new"><span className="qa-ic"><ClipboardList /></span>{t('New order guide')}</a>
-          <a className="qa qa-gray" href="#/labels"><span className="qa-ic"><Tag /></span>{t('Print labels')}</a>
-          <a className="qa qa-gray" href="#/parts/new"><span className="qa-ic"><Plus /></span>{t('Add part')}</a>
-          {isAdmin && <a className="qa qa-orange" href="#/admin/announcements"><span className="qa-ic"><Megaphone /></span>{t('Post announcement')}</a>}
+          {more && <>
+            <a className="qa qa-blue" href="#/orders/new"><span className="qa-ic"><ClipboardList /></span>{t('New order guide')}</a>
+            <a className="qa qa-gray" href="#/labels"><span className="qa-ic"><Tag /></span>{t('Print labels')}</a>
+            <a className="qa qa-gray" href="#/parts/new"><span className="qa-ic"><Plus /></span>{t('Add part')}</a>
+            {isAdmin && <a className="qa qa-orange" href="#/admin/announcements"><span className="qa-ic"><Megaphone /></span>{t('Post announcement')}</a>}
+          </>}
         </section>
       )}
 
       <section className="stats tiles" data-tour="tiles">
         <Stat cls={d.out.length ? 'danger' : 'ok'} to="/parts?status=reorder" icon={<XCircle />} label={t('Out / order now')} value={d.out.length} sub={d.out.length ? t('need ordering now') : t('nothing out — nice')} />
-        <Stat cls={d.low.length ? 'warn' : 'ok'} to="/parts?status=low" icon={<AlertTriangle />} label={t('Running low')} value={d.low.length} sub={t('at or below reorder point')} />
         <Stat cls={pmOverdue ? 'danger' : pmDue ? 'warn' : 'ok'} to="/pms" icon={<Wrench />} label={t('PMs due')} value={pmDue} sub={t('{n} more this week', { n: pmStates.filter((x) => x.daysLeft != null && x.daysLeft > 0 && x.daysLeft <= 7).length })} />
         <Stat cls={d.followUps.length ? 'warn' : 'ok'} to="/notes?show=open" icon={<Flag />} label={t('Follow-ups')} value={d.followUps.length} sub={t('open shift notes')} />
         <Stat cls={d.dtCount ? 'warn' : 'ok'} to="/downtime" icon={<Timer />} label={t('Downtime this week')} value={fmtMinutes(d.dtMin)} sub={plural(d.dtCount, '{n} stop', '{n} stops')} />
-        <Stat cls="info" to="/cores" icon={<Cylinder />} label={t('Crushed cores')} value={d.coresWeek} sub={t('this week')} />
-        <Stat cls="info" to="/orders" icon={<ClipboardList />} label={t('Open orders')} value={d.openOrders} sub={t('order guides in progress')} />
-        <Stat cls="info" to="/parts" icon={<Package />} label={t('Parts')} value={d.partCount} sub={money(d.value)} />
+        {more && <>
+          <Stat cls={d.low.length ? 'warn' : 'ok'} to="/parts?status=low" icon={<AlertTriangle />} label={t('Running low')} value={d.low.length} sub={t('at or below reorder point')} />
+          <Stat cls="info" to="/cores" icon={<Cylinder />} label={t('Crushed cores')} value={d.coresWeek} sub={t('this week')} />
+          <Stat cls="info" to="/orders" icon={<ClipboardList />} label={t('Open orders')} value={d.openOrders} sub={t('order guides in progress')} />
+          <Stat cls="info" to="/parts" icon={<Package />} label={t('Parts')} value={d.partCount} sub={money(d.value)} />
+        </>}
       </section>
+      <button className="link-btn" onClick={() => toggleMore(!more)} data-testid="dash-more" style={{ alignSelf: 'center', marginTop: '-0.6rem' }}>
+        {more ? <><ChevronUp size={18} />{t('Show less')}</> : <><MoreHorizontal size={18} />{t('Show more buttons and numbers')}</>}
+      </button>
 
       <div className="dash-grid">
         <div className="dash-col">

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import QRCode from 'qrcode';
-import { Upload, Smartphone, Trash2, ImagePlus, CheckCircle2, ClipboardPaste } from 'lucide-react';
+import { Upload, Smartphone, Trash2, ImagePlus, CheckCircle2, ClipboardPaste, Camera } from 'lucide-react';
+import { CameraCapture, canUseCamera } from './CameraCapture';
 import { api, errorMessage, imageUrl, publicSiteUrl } from '../lib/api';
 import { prepareImage } from '../lib/util';
 import { toast, useStore } from '../lib/store';
@@ -12,6 +12,7 @@ export function ImagePicker({ value, onChange, label, round, purpose }: { value?
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
   const [phone, setPhone] = useState(false);
+  const [cam, setCam] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const upload = async (file: Blob) => {
@@ -25,7 +26,7 @@ export function ImagePicker({ value, onChange, label, round, purpose }: { value?
 
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      if (phone) return;
+      if (phone || cam) return;
       const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
       const f = item?.getAsFile();
       if (f) { e.preventDefault(); upload(f); }
@@ -33,7 +34,7 @@ export function ImagePicker({ value, onChange, label, round, purpose }: { value?
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone]);
+  }, [phone, cam]);
 
   return (
     <div className={`dropzone ${drag ? 'drag' : ''}`}
@@ -48,12 +49,14 @@ export function ImagePicker({ value, onChange, label, round, purpose }: { value?
         )}
         <div className="col" style={{ alignItems: 'stretch', minWidth: 210 }}>
           <button type="button" className="btn" onClick={() => fileRef.current?.click()} disabled={busy}><Upload size={18} />{value ? t('Replace photo') : t('Upload from this PC')}</button>
+          {canUseCamera() && <button type="button" className="btn" onClick={() => setCam(true)} disabled={busy} data-testid="use-camera"><Camera size={18} />{t(round ? 'Use camera / webcam' : 'Use this device’s camera')}</button>}
           <button type="button" className="btn" onClick={() => setPhone(true)} disabled={busy}><Smartphone size={18} />{t('Take photo with phone')}</button>
           {value && <button type="button" className="btn danger-ghost" onClick={() => onChange(null)}><Trash2 size={18} />{t('Remove photo')}</button>}
           <div className="small muted"><ClipboardPaste size={13} style={{ verticalAlign: -2 }} /> {t('You can also drag a picture here or paste one (Ctrl+V).')}</div>
         </div>
       </div>
       {busy && <div className="small muted" style={{ marginTop: 8 }}>{t('Uploading…')}</div>}
+      {cam && <CameraCapture selfie={round} onClose={() => setCam(false)} onPhoto={(b) => { setCam(false); upload(b); }} />}
       {phone && <PhoneUpload label={label} purpose={purpose} onClose={() => setPhone(false)} onDone={(id) => { onChange(id); setPhone(false); toast(t('Photo received from phone')); }} />}
     </div>
   );
@@ -72,7 +75,7 @@ function PhoneUpload({ onClose, onDone, label, purpose }: { onClose: () => void;
       .then(async (r) => {
         setCode(r.code);
         const url = `${publicSiteUrl(settingsUrl)}#/m/${r.code}`;
-        setQr(await QRCode.toDataURL(url, { width: 520, margin: 1, errorCorrectionLevel: 'M' }));
+        setQr(await (await import('qrcode')).default.toDataURL(url, { width: 520, margin: 1, errorCorrectionLevel: 'M' }));
       })
       .catch((e) => setErr(t(errorMessage(e))));
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -170,7 +170,7 @@ function UserForm({ user, onClose, onSaved }: { user: Partial<PublicUser>; onClo
         <div className="grid-2">
           <Field label="Name" required hint="Can be used to sign in — must be unique"><input className="input" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus /></Field>
           <Field label="Email" required><input className="input" type="email" value={d.email} onChange={(e) => setD({ ...d, email: e.target.value })} /></Field>
-          <Field label="Badge ID (optional)" hint="Click here and scan their badge, or type the ID exactly as printed (letters and symbols like 7A:018 are fine). Lets them sign in with one scan." className="span-2">
+          <Field label="Badge ID (optional)" hint="Click here and scan their badge, or type the ID exactly as printed (letters and symbols like AB-1234 are fine). Lets them sign in with one scan." className="span-2">
             <input className="input mono" value={d.badge} autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder={t('Scan or type')} onChange={(e) => setD({ ...d, badge: e.target.value.slice(0, 40) })}
               onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); /* scanners press Enter — don't submit the form */ }} />
           </Field>
@@ -249,7 +249,7 @@ function SystemTab() {
       </div>
       <div className="card card-pad row wrap" style={{ justifyContent: 'space-between' }}>
         <div><b>{t('Try it with demo data')}</b><div className="small muted">{t('Fills an empty database with realistic sample data.')}</div></div>
-        <button className="btn" onClick={demo} disabled={partsCount > 0}>{partsCount > 0 ? t('Only available when empty (use Erase all data below first)') : t('Load demo data')}</button>
+        <button className="btn" onClick={demo} disabled={partsCount > 0} style={{ whiteSpace: 'normal', maxWidth: '100%', textAlign: 'left' }}>{partsCount > 0 ? t('Only available when empty (use Erase all data below first)') : t('Load demo data')}</button>
       </div>
       <div className="card card-pad stack" style={{ borderColor: 'var(--danger-border)' }}>
         <h3 style={{ color: 'var(--danger)' }}><AlertTriangle size={20} style={{ verticalAlign: -4 }} /> {t('Danger zone')}</h3>

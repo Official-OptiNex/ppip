@@ -6,6 +6,7 @@ import { download, fmtDateTime, matches, setQuery, toCSV, todayISO, uniqueSorted
 import { HBarList } from '../components/Charts';
 import { Combobox, Empty, Field, Modal, NumberInput, SearchInput, confirmDialog, Person } from '../components/ui';
 import { plural, t } from '../lib/i18n';
+import { PhotoAttach, PhotoThumb } from '../components/PhotoAttach';
 
 const DAY = 86_400_000;
 export const PERIODS: [string, string][] = [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last 12 months'], ['all', 'All time']];
@@ -126,7 +127,7 @@ export function DowntimePage({ query, welderOnly }: { query: URLSearchParams; we
                   <tr key={d.id} className={canEdit ? 'clickable' : ''} onClick={canEdit ? () => setEditing(d) : undefined}>
                     <td className="nowrap">{fmtDateTime(d.startedAt)}</td>
                     <td><b>{welderOnly ? d.welder || d.machine : d.machine}</b>{!welderOnly && d.welder && <div className="small muted">{d.welder}</div>}{welderOnly && d.welder && <div className="small muted">{d.machine}</div>}</td>
-                    <td>{d.category && <span className="pill neutral" style={{ marginRight: 6 }}>{t(d.category)}</span>}{d.problem}{d.fix && <div className="small muted">{t('Fix:')} {d.fix}</div>}{!welderOnly && d.bpm ? <div className="small muted">{t('{n} bags/min', { n: d.bpm })}</div> : null}</td>
+                    <td>{d.category && <span className="pill neutral" style={{ marginRight: 6 }}>{t(d.category)}</span>}{d.problem}{d.fix && <div className="small muted">{t('Fix:')} {d.fix}</div>}{!welderOnly && d.bpm ? <div className="small muted">{t('{n} bags/min', { n: d.bpm })}</div> : null}{d.imageId && <div style={{ marginTop: 6 }}><PhotoThumb id={d.imageId} size={52} /></div>}</td>
                     <td className="num nowrap"><b>{d.minutes != null ? fmtMinutes(d.minutes) : '—'}</b></td>
                     {welderOnly && <td className="num nowrap">{d.bpm ? `${d.bpm} bpm` : '—'}</td>}
                     <td>{d.reportedBy ? <Person name={d.reportedBy} /> : <span className="muted">—</span>}</td>
@@ -206,6 +207,7 @@ export function DowntimeForm({ item, preset, onClose }: { item?: Downtime; prese
         </Field>
         <Field label="What happened?" required><textarea className="input" value={d.problem || ''} onChange={(e) => set('problem', e.target.value)} placeholder={t('e.g. Seal not holding on the left side, bags opening')} rows={2} /></Field>
         <Field label="What fixed it? (optional)"><textarea className="input" value={d.fix || ''} onChange={(e) => set('fix', e.target.value)} placeholder={t('e.g. Cleaned anvil, raised amplitude to 80%')} rows={2} /></Field>
+        <Field label="Photo (optional)"><div><PhotoAttach value={d.imageId} onChange={(id) => set('imageId', id)} label={d.machine} /></div></Field>
         <div className="grid-form">
           <Field label="Speed when it happened (bags / min, optional)"><NumberInput value={d.bpm} onChange={(v) => set('bpm', v ?? undefined)} min={0} placeholder="e.g. 120" /></Field>
           <Field label="Reported by (optional)"><Combobox value={d.reportedBy || ''} onChange={(v) => set('reportedBy', v)} options={uniqueSorted([...people, me?.name])} placeholder={t('Name')} /></Field>

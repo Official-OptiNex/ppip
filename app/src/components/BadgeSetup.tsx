@@ -33,7 +33,7 @@ export function BadgeDialog({ onClose }: { onClose: () => void }) {
           <div style={{ fontSize: '1.05rem' }}>{rich('**Scan your badge now**, or type the number. After this you can sign in on any computer with one scan.')}</div>
         </div>
         <Field label="Badge ID">
-          <input ref={inputRef} className="input mono" value={badge} autoFocus autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder={t('Scan or type (e.g. 7A:018)')}
+          <input ref={inputRef} className="input mono" value={badge} autoFocus autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder={t('Scan or type (e.g. AB-1234)')}
             onChange={(e) => setBadge(e.target.value.slice(0, 40))} style={{ minHeight: '3.2rem', fontSize: '1.3rem', letterSpacing: '0.08em' }} />
         </Field>
         {err && <div className="banner danger">{err}</div>}

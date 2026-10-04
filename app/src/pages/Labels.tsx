@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import QRCode from 'qrcode';
 import { Printer, CheckSquare, Square, Info, Scissors } from 'lucide-react';
 import { EQUIPMENT_LABEL, type Equipment, type Part } from '../../../shared/types';
 import { publicSiteUrl, safeGet, safeSet } from '../lib/api';
@@ -90,7 +89,7 @@ export function LabelsPage({ query }: { query: URLSearchParams }) {
     let alive = true;
     (async () => {
       const out: Record<string, string> = {};
-      for (const it of chosen) if (it.qr) out[it.qr] = qrImg[it.qr] || await QRCode.toDataURL(it.qr, { margin: 0, width: 600, errorCorrectionLevel: 'M' });
+      for (const it of chosen) if (it.qr) out[it.qr] = qrImg[it.qr] || await (await import('qrcode')).default.toDataURL(it.qr, { margin: 0, width: 600, errorCorrectionLevel: 'M' });
       if (alive) setQrImg(out);
     })();
     return () => { alive = false; };

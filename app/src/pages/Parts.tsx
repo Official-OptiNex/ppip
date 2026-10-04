@@ -171,8 +171,7 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
                 <tr>
                   <th style={{ width: 64 }} aria-label={t('Photo')} />
                   <Th k="name">{t('Part')}</Th>
-                  <Th k="partNumber">{t('Part #')}</Th>
-                  <Th k="manufacturer">{t('Manufacturer')}</Th>
+                  <Th k="partNumber">{t('Part # / maker')}</Th>
                   <Th k="location" className="hide-md">{t('Location')}</Th>
                   <Th k="status" className="num">{t('In stock')}</Th>
                   <th className="right">{t('Actions')}</th>
@@ -191,16 +190,14 @@ export function PartsPage({ openId, query }: { openId?: string; query: URLSearch
                         </div>
                         <div className="small muted ellipsis">{[p.category, p.description].filter(Boolean).join(' · ') || ' '}</div>
                       </td>
-                      <td className="mono">{p.partNumber || '—'}</td>
-                      <td>{p.manufacturer || '—'}</td>
+                      <td><div className="mono">{p.partNumber || '—'}</div>{p.manufacturer && <div className="small muted ellipsis" style={{ maxWidth: 200 }}>{p.manufacturer}</div>}</td>
                       <td className="hide-md">{p.location || '—'}</td>
-                      <td className="num">
+                      <td className="num" title={p.minQty != null && st !== 'retired' ? t('reorder at {n}', { n: p.minQty }) : undefined}>
                         <div className="qty-cell">
                           <span className={`qty-big ${st}`}>{p.qty}</span>
                           <span className="small muted" style={{ minWidth: '2ch', textAlign: 'left' }}>{p.unit || ''}</span>
                         </div>
                         <div style={{ marginTop: 2 }}><StatusPill status={st} /></div>
-                        {p.minQty != null && st !== 'retired' && <div className="small muted">{t('reorder at {n}', { n: p.minQty })}</div>}
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
                         <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>

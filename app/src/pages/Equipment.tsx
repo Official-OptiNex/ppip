@@ -124,18 +124,24 @@ export function EquipmentPage({ type, query, embedded }: { type: EquipmentType; 
         </div>
       </div>
 
-      <div className="tiles" style={{ marginBottom: '1rem' }} data-tour="eq-add">
-                <button className="tile warn" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'repair' })}><span className="t-label">{t('In repair')}</span><span className="t-value">{counts.repair}</span><span className="t-sub">{t('out for rebuild')}</span></button>
-        <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'retired' })}><span className="t-label">{t('Retired')}</span><span className="t-value">{counts.retired}</span><span className="t-sub">{t('scrapped')}</span></button>
-        <button className="tile info" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'installed' })}><span className="t-label">{hw(type, 'On machines', 'On welders')}</span><span className="t-value">{counts.installed}</span><span className="t-sub">{t('in service now')}</span></button>
-        <button className="tile" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setQuery({ status: 'spare' })}><span className="t-label">{t('Spares ready')}</span><span className="t-value">{counts.spare}</span><span className="t-sub">{t('ready to install')}</span></button>
-      </div>
+      {view !== 'life' && (
+        <div className="chips scroll" style={{ marginBottom: '0.8rem' }} data-tour="eq-add" role="group" aria-label={t('Status')}>
+          {([
+            ['active', t('All (not retired)'), counts.installed + counts.spare + counts.repair, ''],
+            ['installed', hw(type, 'On machines', 'On welders'), counts.installed, 'ok'],
+            ['spare', t('Spares ready'), counts.spare, ''],
+            ['repair', t('In repair'), counts.repair, 'low'],
+            ['retired', t('Retired'), counts.retired, ''],
+          ] as const).map(([id, label, n, cls]) => (
+            <button key={id} className={`filter-chip ${cls} ${status === id ? 'on' : ''}`} onClick={() => setQuery({ status: id === 'active' ? null : id })} aria-pressed={status === id}>
+              {cls && <span className={`dot ${cls}`} />}{label}<span className="n">{n}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="row wrap" style={{ marginBottom: '1rem' }}>
         <SearchInput value={q} onChange={setQ} placeholder={hw(type, 'Search by tag, machine, size…', 'Search by tag, welder…')} />
-        {view !== 'life' && <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={status} onChange={(e) => setQuery({ status: e.target.value === 'active' ? null : e.target.value })}>
-          <option value="active">{t('All (not retired)')}</option><option value="installed">{hw(type, 'On machine', 'On welder')}</option><option value="spare">{t('Spares')}</option><option value="repair">{t('In repair')}</option><option value="retired">{t('Retired')}</option><option value="all">{t('Everything')}</option>
-        </select>}
         <select className="input" style={{ width: 'auto', minHeight: '3rem' }} value={machineFilter} onChange={(e) => setQuery({ machine: e.target.value })}>
           <option value="">{hw(type, 'All machines', 'All welders')}</option>{machines.map((m) => <option key={m}>{m}</option>)}
         </select>
@@ -153,15 +159,14 @@ export function EquipmentPage({ type, query, embedded }: { type: EquipmentType; 
       ) : view === 'list' ? (
         <div className="table-wrap">
           <table className="tbl">
-            <thead><tr><th>{t('Tag / ID')}</th><th>{t('Details')}</th><th>{hw(type, 'Machine', 'Welder')}</th><th>{t('Installed')}</th><th style={{ minWidth: 200 }}>{hw(type, 'Time on machine', 'Time on welder')}</th><th>{t('Status')}</th><th className="right">{t('Actions')}</th></tr></thead>
+            <thead><tr><th>{t('Tag / ID')}</th><th>{t('Details')}</th><th>{hw(type, 'Machine', 'Welder')}</th><th style={{ minWidth: 190 }}>{hw(type, 'Time on machine', 'Time on welder')}</th><th>{t('Status')}</th><th className="right">{t('Actions')}</th></tr></thead>
             <tbody>
               {filtered.map(({ e, pm }) => (
                 <tr key={e.id} className={`clickable ${pm.state === 'due' ? 'st-out' : pm.state === 'soon' ? 'st-low' : e.status === 'installed' ? 'st-ok' : e.status === 'retired' ? 'st-retired' : ''}`} onClick={() => setQuery({ open: e.id })}>
                   <td><b className="mono" style={{ fontSize: '1.05rem' }}>{e.tag}</b></td>
                   <td>{describe(e) || '—'}</td>
-                  <td>{e.machine ? <><b>{e.machine}</b>{e.position && <div className="small muted">{e.position}</div>}</> : <span className="muted">—</span>}</td>
-                  <td>{e.status === 'installed' ? fmtDate(e.installedAt) : '—'}</td>
-                  <td><PmBar pm={pm} /></td>
+                  <td className="nowrap">{e.machine ? <><b>{e.machine}</b>{e.position && <div className="small muted">{e.position}</div>}</> : <span className="muted">—</span>}</td>
+                  <td><PmBar pm={pm} />{e.status === 'installed' && e.installedAt && <div className="small muted">{t('since {date}', { date: fmtDate(e.installedAt) })}</div>}</td>
                   <td><span className={`pill ${STATUS_CLS[e.status]}`}>{statusLabel(e)}</span></td>
                   <td onClick={(ev) => ev.stopPropagation()}><Actions e={e} canEdit={canEdit} onAction={(kind) => setAction({ e, kind })} onEdit={() => setEditing(e)} /></td>
                 </tr>
